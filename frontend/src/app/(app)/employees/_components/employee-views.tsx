@@ -29,6 +29,11 @@ type ViewProps = {
   canDelete?: boolean;
   /** Adds "Send sign-in invite". Separate: it is an update, not a delete. */
   canInvite?: boolean;
+  /**
+   * The signed-in person's own employee id, so their row can leave out the
+   * two things nobody should do to themselves.
+   */
+  selfId?: string | null;
 };
 
 /** Warns that payroll cannot pay this person yet. */
@@ -54,20 +59,31 @@ function StatusBadge({ employee }: { employee: EmployeeSummaryDto }) {
   );
 }
 
+/**
+ * Your own row is the one place these two verbs are traps rather than tools.
+ *
+ * Sending yourself an invite replaces the password you are signed in with, and
+ * deleting yourself removes the account holding the session doing it. Both are
+ * reasonable things to do *to someone else*, which is why they are hidden here
+ * rather than removed: an admin managing their own account does it from the
+ * profile screen, where the wording can say what is about to happen.
+ */
 function RowMenu({
   employee,
   canDelete,
   canInvite,
+  isSelf,
 }: {
   employee: EmployeeSummaryDto;
   canDelete?: boolean;
   canInvite?: boolean;
+  isSelf?: boolean;
 }) {
   return (
     <div className="relative z-10 shrink-0">
       <RowActions
         items={
-          canInvite
+          canInvite && !isSelf
             ? [
                 {
                   label: "Send invite",
@@ -86,7 +102,7 @@ function RowMenu({
             : []
         }
         remove={
-          canDelete
+          canDelete && !isSelf
             ? {
                 action: deleteEmployee.bind(null, employee.id),
                 title: `Delete ${employee.fullName}?`,
@@ -108,6 +124,7 @@ export function EmployeeList({
   employees,
   canDelete,
   canInvite,
+  selfId,
 }: ViewProps) {
   return (
     <ul className="divide-y divide-border overflow-hidden rounded-xl border border-border bg-card">
@@ -155,6 +172,7 @@ export function EmployeeList({
             employee={employee}
             canDelete={canDelete}
             canInvite={canInvite}
+            isSelf={employee.id === selfId}
           />
         </li>
       ))}
@@ -167,6 +185,7 @@ export function EmployeeCards({
   employees,
   canDelete,
   canInvite,
+  selfId,
 }: ViewProps) {
   return (
     <ul className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
@@ -199,6 +218,7 @@ export function EmployeeCards({
                   employee={employee}
                   canDelete={canDelete}
                   canInvite={canInvite}
+                  isSelf={employee.id === selfId}
                 />
               </div>
 

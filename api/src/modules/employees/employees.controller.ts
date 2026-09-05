@@ -60,8 +60,11 @@ export class EmployeesController {
   @Post(':id/reinvite')
   @RequirePermission('employees', 'update')
   @ApiOperation({ summary: 'Send a new one-time password to an employee' })
-  reinvite(@Param('id', ParseEntityIdPipe) id: string) {
-    return this.employees.reinvite(id);
+  reinvite(
+    @Param('id', ParseEntityIdPipe) id: string,
+    @CurrentUser() user: AuthenticatedUser
+  ) {
+    return this.employees.reinvite(id, user);
   }
 
   @Patch(':id')
@@ -77,7 +80,10 @@ export class EmployeesController {
   @Delete(':id')
   @RequirePermission('employees', 'delete')
   @ApiOperation({ summary: 'Delete, or archive instead when payslips exist' })
-  remove(@Param('id', ParseEntityIdPipe) id: string) {
-    return this.employees.remove(id);
+  remove(
+    @Param('id', ParseEntityIdPipe) id: string,
+    @CurrentUser() user: AuthenticatedUser
+  ) {
+    return this.employees.remove(id, user);
   }
 }

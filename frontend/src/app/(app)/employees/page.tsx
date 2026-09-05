@@ -133,12 +133,14 @@ export default async function EmployeesPage({
           employees={employees}
           canDelete={canDelete}
           canInvite={canInvite}
+          selfId={session.employeeId}
         />
       ) : (
         <EmployeeCards
           employees={employees}
           canDelete={canDelete}
           canInvite={canInvite}
+          selfId={session.employeeId}
         />
       )}
 

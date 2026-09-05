@@ -366,9 +366,24 @@ export class EmployeesService {
    * Reissues a one-time password and emails it again, for someone who never
    * got the first invite or has locked themselves out.
    */
+  /**
+   * Refused on your own record.
+   *
+   * A reinvite replaces the password on the account, so aimed at yourself it
+   * ends the session running it and locks you out until the mail arrives —
+   * and on an install with no mail configured, until someone else intervenes.
+   * Changing your own password is what `/auth/change-password` is for.
+   */
   async reinvite(
-    id: string
+    id: string,
+    user: AuthenticatedUser
   ): Promise<{ delivered: boolean; error?: string; oneTimePassword?: string }> {
+    if (user.employeeId === id) {
+      throw new BadRequestException(
+        'You cannot send yourself an invite: it would replace the password you are signed in with. Change your own password from your profile instead.'
+      );
+    }
+
     const employee = await this.prisma.employee.findUniqueOrThrow({
       where: { id },
       select: { userId: true, firstName: true, lastName: true, workEmail: true },
@@ -404,7 +419,18 @@ export class EmployeesService {
     return { ...invite, oneTimePassword: password };
   }
 
-  async remove(id: string): Promise<{ deleted: boolean; archived: boolean }> {
+  async remove(
+    id: string,
+    user: AuthenticatedUser
+  ): Promise<{ deleted: boolean; archived: boolean }> {
+    // Deleting yourself destroys the account holding the session doing it, and
+    // on the last admin it locks everyone out of the panel for good.
+    if (user.employeeId === id) {
+      throw new BadRequestException(
+        'You cannot delete your own record. Ask another administrator to do it.'
+      );
+    }
+
     const payslipCount = await this.prisma.payslip.count({ where: { employeeId: id } });
 
     // Payroll history must not be destroyed; archive the employee instead.
