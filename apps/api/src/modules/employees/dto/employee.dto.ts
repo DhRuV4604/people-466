@@ -4,11 +4,14 @@ import {
   IsDateString,
   IsEmail,
   IsEnum,
+  IsInt,
   IsOptional,
   IsString,
+  Max,
   MaxLength,
+  Min,
 } from 'class-validator';
-import { Transform } from 'class-transformer';
+import { Transform, Type } from 'class-transformer';
 import { IsEntityId } from '../../../common/validation/entity-id';
 import { EMPLOYEE_TYPES, EMPLOYEE_STATUSES } from '@peoplepay360/shared';
 import type { EmployeeType, EmployeeStatus } from '@peoplepay360/shared';
@@ -128,4 +131,14 @@ export class QueryEmployeesDto {
   @Transform(({ value }) => value === 'true' || value === true)
   @IsBoolean()
   missingBank?: boolean;
+
+  // Bounded like the other list endpoints, so an unfiltered read cannot pull
+  // the whole table into a page render.
+  @ApiPropertyOptional({ default: 300, maximum: 1000 })
+  @IsOptional()
+  @Type(() => Number)
+  @IsInt()
+  @Min(1)
+  @Max(1000)
+  limit?: number;
 }

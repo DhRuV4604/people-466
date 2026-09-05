@@ -1,6 +1,10 @@
 import { Injectable, NotFoundException, BadRequestException } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
-import type { EmployeeSummaryDto, EmployeeDetailDto } from '@peoplepay360/shared';
+import type {
+  EmployeeSummaryDto,
+  EmployeeDetailDto,
+  EmployeeOptionDto,
+} from '@peoplepay360/shared';
 import { PrismaService } from '../../prisma/prisma.service';
 import type { AuthenticatedUser } from '../auth/auth.types';
 import { CreateEmployeeDto, UpdateEmployeeDto, QueryEmployeesDto } from './dto/employee.dto';
@@ -72,9 +76,33 @@ export class EmployeesService {
       where,
       include: SUMMARY_INCLUDE,
       orderBy: [{ status: 'asc' }, { firstName: 'asc' }],
+      take: query.limit ?? 300,
     });
 
     return employees.map((e) => this.toSummary(e));
+  }
+
+  /**
+   * The id/label pairs forms need to point a record at an employee.
+   *
+   * Deliberately not `findAll`: a dropdown needs four columns, not every column
+   * of every row plus its department, position, manager and schedule. The same
+   * own-records scoping applies, so an Employee still only ever sees itself.
+   */
+  async findOptions(user: AuthenticatedUser): Promise<EmployeeOptionDto[]> {
+    const scoped = user.role === 'EMPLOYEE' ? { id: user.employeeId ?? NO_MATCH_ID } : {};
+
+    const employees = await this.prisma.employee.findMany({
+      where: scoped,
+      select: { id: true, firstName: true, lastName: true, employeeCode: true },
+      orderBy: [{ firstName: 'asc' }, { lastName: 'asc' }],
+    });
+
+    return employees.map((e) => ({
+      id: e.id,
+      fullName: `${e.firstName} ${e.lastName}`,
+      employeeCode: e.employeeCode,
+    }));
   }
 
   async findOne(id: string, user: AuthenticatedUser): Promise<EmployeeDetailDto> {

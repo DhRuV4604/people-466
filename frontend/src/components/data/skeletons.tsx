@@ -72,3 +72,43 @@ export function ListSkeleton({ rows = 8 }: { rows?: number }) {
     </>
   );
 }
+
+/**
+ * A titled panel whose body is still arriving. Used behind the Suspense
+ * boundaries on the overview, where each section fetches its own slice.
+ */
+export function SectionSkeleton({ rows = 4 }: { rows?: number }) {
+  return (
+    <div className="flex flex-col gap-4 rounded-xl border border-border p-5">
+      <div className="flex flex-col gap-2">
+        <Skeleton className="h-4 w-40" />
+        <Skeleton className="h-3 w-64 max-w-full" />
+      </div>
+      <div className="flex flex-col gap-3">
+        {Array.from({ length: rows }).map((_, index) => (
+          <div key={index} className="flex items-center justify-between gap-4">
+            <Skeleton className="h-3.5 w-32 max-w-full" />
+            <Skeleton className="h-3.5 w-20 shrink-0" />
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+/** Two stacked columns of sections, the overview's body layout. */
+export function OverviewSkeleton() {
+  return (
+    <div className="grid gap-6 xl:grid-cols-[minmax(0,2fr)_minmax(0,1fr)]">
+      <div className="flex flex-col gap-6">
+        <SectionSkeleton rows={5} />
+        <SectionSkeleton rows={6} />
+      </div>
+      <div className="flex flex-col gap-6">
+        <SectionSkeleton rows={4} />
+        <SectionSkeleton rows={3} />
+        <SectionSkeleton rows={2} />
+      </div>
+    </div>
+  );
+}

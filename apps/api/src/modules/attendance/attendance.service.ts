@@ -346,51 +346,51 @@ export class AttendanceService {
     employeeType?: string | null;
     employeeId?: string | null;
   }): Promise<AttendanceSummaryDto> {
-    const records = await this.prisma.attendance.findMany({
-      where: {
-        checkIn: { gte: params.from, lte: params.to },
-        ...(params.employeeId ? { employeeId: params.employeeId } : {}),
-        ...(params.departmentId || params.employeeType
-          ? {
-              employee: {
-                ...(params.departmentId ? { departmentId: params.departmentId } : {}),
-                ...(params.employeeType
-                  ? { employeeType: params.employeeType as never }
-                  : {}),
-              },
-            }
-          : {}),
-      },
-      select: {
-        status: true,
-        manuallyEdited: true,
-        checkOut: true,
-        workedHours: true,
-        overtimeHours: true,
-      },
-    });
+    // Counts and sums only, so they are computed in Postgres rather than by
+    // loading every attendance row for the period into Node. This endpoint
+    // grows by headcount x days, which is what made it the slowest query here.
+    const where: Prisma.AttendanceWhereInput = {
+      checkIn: { gte: params.from, lte: params.to },
+      ...(params.employeeId ? { employeeId: params.employeeId } : {}),
+      ...(params.departmentId || params.employeeType
+        ? {
+            employee: {
+              ...(params.departmentId ? { departmentId: params.departmentId } : {}),
+              ...(params.employeeType ? { employeeType: params.employeeType as never } : {}),
+            },
+          }
+        : {}),
+    };
 
-    const count = (status: string) => records.filter((r) => r.status === status).length;
+    const [byStatus, totals, manualEdits, withBoth] = await Promise.all([
+      this.prisma.attendance.groupBy({ by: ['status'], where, _count: { _all: true } }),
+      this.prisma.attendance.aggregate({
+        where,
+        _count: { _all: true },
+        _sum: { workedHours: true, overtimeHours: true },
+      }),
+      this.prisma.attendance.count({ where: { ...where, manuallyEdited: true } }),
+      this.prisma.attendance.count({ where: { ...where, checkOut: { not: null } } }),
+    ]);
 
+    const count = (status: string) =>
+      byStatus.find((row) => row.status === status)?._count._all ?? 0;
+
+    const totalRecords = totals._count._all;
     const present = count('PRESENT');
-    const totalWorkedHours = round2(records.reduce((s, r) => s + toNumber(r.workedHours), 0));
-    const totalOvertimeHours = round2(
-      records.reduce((s, r) => s + toNumber(r.overtimeHours), 0)
-    );
-    const withBoth = records.filter((r) => r.checkOut !== null).length;
 
     return {
-      totalRecords: records.length,
+      totalRecords,
       present,
       late: count('LATE'),
       absent: count('ABSENT'),
       halfDay: count('HALF_DAY'),
       missingCheckout: count('MISSING_CHECKOUT'),
-      manualEdits: records.filter((r) => r.manuallyEdited).length,
-      totalWorkedHours,
-      totalOvertimeHours,
-      healthPercent: records.length > 0 ? round2((present / records.length) * 100) : 100,
-      coveragePercent: records.length > 0 ? round2((withBoth / records.length) * 100) : 100,
+      manualEdits,
+      totalWorkedHours: round2(toNumber(totals._sum.workedHours)),
+      totalOvertimeHours: round2(toNumber(totals._sum.overtimeHours)),
+      healthPercent: totalRecords > 0 ? round2((present / totalRecords) * 100) : 100,
+      coveragePercent: totalRecords > 0 ? round2((withBoth / totalRecords) * 100) : 100,
     };
   }
 

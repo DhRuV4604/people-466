@@ -52,19 +52,64 @@ export class DashboardService {
           }
         : {};
 
-    const [employees, payslips, leaveRequests, departments, payruns] = await Promise.all([
+    // The horizon for expiring contracts is computed here so the query can join
+    // the batch below rather than run after it.
+    const now = new Date();
+    const horizon = new Date(now.getTime() + 30 * 86400000);
+
+    const payslipFilter: Prisma.PayslipWhereInput = {
+      periodStart: { gte: filters.periodStart },
+      periodEnd: { lte: filters.periodEnd },
+      status: { not: 'CANCELLED' },
+      ...relatedEmployeeFilter,
+    };
+
+    // The rolling trend is independent of the selected period, so its window is
+    // computed up front and its query joins the batch below.
+    const trendStart = startOfMonth(
+      new Date(filters.periodEnd.getFullYear(), filters.periodEnd.getMonth() - 11, 1)
+    );
+
+    const [
+      employees,
+      payslips,
+      leaveRequests,
+      departments,
+      payruns,
+      attendanceSummary,
+      expiring,
+      pendingAllocations,
+      payslipTotals,
+      trendPayslips,
+    ] = await Promise.all([
       this.prisma.employee.findMany({
         where: employeeFilter,
-        include: { department: true, contracts: true },
-      }),
-      this.prisma.payslip.findMany({
-        where: {
-          periodStart: { gte: filters.periodStart },
-          periodEnd: { lte: filters.periodEnd },
-          status: { not: 'CANCELLED' },
-          ...relatedEmployeeFilter,
+        select: {
+          id: true,
+          firstName: true,
+          lastName: true,
+          employeeType: true,
+          departmentId: true,
+          bankName: true,
+          bankAccountNumber: true,
+          department: { select: { name: true } },
+          contracts: true,
         },
-        include: { employee: { include: { department: true } } },
+      }),
+      // Only the fields the aggregates and duplicate check below actually read.
+      // The full employee+department include re-serialised the same department
+      // once per payslip.
+      this.prisma.payslip.findMany({
+        where: payslipFilter,
+        select: {
+          number: true,
+          employeeId: true,
+          periodStart: true,
+          netPay: true,
+          employee: {
+            select: { firstName: true, lastName: true, departmentId: true },
+          },
+        },
       }),
       this.prisma.leaveRequest.findMany({
         where: {
@@ -81,28 +126,53 @@ export class DashboardService {
           periodEnd: { lte: filters.periodEnd },
         },
       }),
+      // These three depend on nothing else in the batch, so they belong in it
+      // rather than as separate awaits further down.
+      this.attendance.getSummary({
+        from: filters.periodStart,
+        to: filters.periodEnd,
+        departmentId: filters.departmentId,
+        employeeType: filters.employeeType,
+      }),
+      this.prisma.contract.findMany({
+        where: { status: 'RUNNING', dateEnd: { not: null, gte: now, lte: horizon } },
+        select: {
+          id: true,
+          dateEnd: true,
+          employee: { select: { firstName: true, lastName: true } },
+        },
+        orderBy: { dateEnd: 'asc' },
+      }),
+      this.prisma.leaveAllocation.count({ where: { status: 'DRAFT' } }),
+      // Postgres sums the money columns; Node only formats the result.
+      this.prisma.payslip.aggregate({
+        where: payslipFilter,
+        _count: { _all: true },
+        _sum: { netPay: true, grossPay: true, totalDeductions: true },
+      }),
+      this.prisma.payslip.findMany({
+        where: {
+          periodStart: { gte: trendStart },
+          periodEnd: { lte: endOfMonth(filters.periodEnd) },
+          status: { not: 'CANCELLED' },
+          ...relatedEmployeeFilter,
+        },
+        select: { periodStart: true, netPay: true },
+      }),
     ]);
 
     // ---- KPIs
-    const totalNetPaid = round2(payslips.reduce((s, p) => s + toNumber(p.netPay), 0));
-    const totalGross = round2(payslips.reduce((s, p) => s + toNumber(p.grossPay), 0));
-    const totalDeductions = round2(
-      payslips.reduce((s, p) => s + toNumber(p.totalDeductions), 0)
-    );
-    const averageSalary = payslips.length > 0 ? round2(totalNetPaid / payslips.length) : 0;
+    const payslipCount = payslipTotals._count._all;
+    const totalNetPaid = round2(toNumber(payslipTotals._sum.netPay));
+    const totalGross = round2(toNumber(payslipTotals._sum.grossPay));
+    const totalDeductions = round2(toNumber(payslipTotals._sum.totalDeductions));
+    const averageSalary = payslipCount > 0 ? round2(totalNetPaid / payslipCount) : 0;
 
     const approvedTimeOffDays = round2(
       leaveRequests
         .filter((r) => r.status === 'APPROVED')
         .reduce((s, r) => s + toNumber(r.duration), 0)
     );
-
-    const attendanceSummary = await this.attendance.getSummary({
-      from: filters.periodStart,
-      to: filters.periodEnd,
-      departmentId: filters.departmentId,
-      employeeType: filters.employeeType,
-    });
 
     // ---- Salary cost by department
     const salaryByDepartment = departments
@@ -117,21 +187,7 @@ export class DashboardService {
       .filter((d) => d.headcount > 0 || d.totalNet > 0)
       .sort((a, b) => b.totalNet - a.totalNet);
 
-    // ---- Rolling twelve-month trend, independent of the selected period so the
-    // chart shows history rather than a single bar.
-    const trendStart = startOfMonth(
-      new Date(filters.periodEnd.getFullYear(), filters.periodEnd.getMonth() - 11, 1)
-    );
-    const trendPayslips = await this.prisma.payslip.findMany({
-      where: {
-        periodStart: { gte: trendStart },
-        periodEnd: { lte: endOfMonth(filters.periodEnd) },
-        status: { not: 'CANCELLED' },
-        ...relatedEmployeeFilter,
-      },
-      select: { periodStart: true, netPay: true },
-    });
-
+    // ---- Rolling twelve-month trend, bucketed from the batch query above.
     const monthlyTrend: DashboardDto['monthlyTrend'] = [];
     for (let i = 11; i >= 0; i--) {
       const monthDate = new Date(
@@ -189,13 +245,6 @@ export class DashboardService {
         department: e.department?.name ?? '—',
       }));
 
-    const now = new Date();
-    const horizon = new Date(now.getTime() + 30 * 86400000);
-    const expiring = await this.prisma.contract.findMany({
-      where: { status: 'RUNNING', dateEnd: { not: null, gte: now, lte: horizon } },
-      include: { employee: true },
-      orderBy: { dateEnd: 'asc' },
-    });
     const expiringContracts = expiring.map((c) => ({
       id: c.id,
       name: `${c.employee.firstName} ${c.employee.lastName}`,
@@ -219,9 +268,6 @@ export class DashboardService {
       .filter((p) => p.status === 'DRAFT' || p.status === 'COMPUTED')
       .map((p) => ({ id: p.id, name: p.name, status: p.status }));
 
-    const pendingAllocations = await this.prisma.leaveAllocation.count({
-      where: { status: 'DRAFT' },
-    });
 
     // ---- Breakdowns
     const payrunStatusBreakdown = ['DRAFT', 'COMPUTED', 'VALIDATED', 'PAID'].map((status) => ({
@@ -236,7 +282,7 @@ export class DashboardService {
     return {
       kpis: {
         totalNetPaid,
-        payslipsGenerated: payslips.length,
+        payslipsGenerated: payslipCount,
         averageSalary,
         approvedTimeOffDays,
         attendanceHealth: attendanceSummary.healthPercent,
