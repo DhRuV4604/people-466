@@ -91,11 +91,17 @@ people-466/
 
 | Document | What it covers |
 |---|---|
+| [docs/project-guide.md](docs/project-guide.md) | **Start here.** The whole project in one read — stack, database, every folder, core functionality, and the reasoning behind each decision |
 | [docs/architecture.md](docs/architecture.md) | How the three packages fit, request flow, sessions, RBAC |
 | [docs/frontend.md](docs/frontend.md) | Component library, the form and mutation spine, adding a screen |
 | [docs/api.md](docs/api.md) | Every endpoint, and the conventions they share |
 | [docs/data-model.md](docs/data-model.md) | The entities, their relationships, and the payroll engine |
 | [docs/operations.md](docs/operations.md) | Environment, Docker, migrations, deployment, troubleshooting |
+
+`npm run docs:pdf` renders all of them to `docs/pdf/` for printing or handing in.
+It needs Chrome or Edge (already present on most machines; set `CHROME_PATH` if not)
+and installs its Markdown parser outside this repo, so nothing is added to
+`package.json`. The Markdown stays the source — the PDFs are generated and gitignored.
 
 ## Commands
 
@@ -111,6 +117,7 @@ people-466/
 | `npm run db:seed` | Seed the database |
 | `npm run db:reset` | Drop, re-migrate and reseed |
 | `npm run db:studio` | Prisma Studio |
+| `npm run docs:pdf` | Render every document to PDF in `docs/pdf/` |
 | `npm run docker:up` / `docker:down` / `docker:logs` | The full stack |
 
 ## Stack

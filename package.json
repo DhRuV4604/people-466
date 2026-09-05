@@ -23,6 +23,7 @@
     "db:seed": "npm run db:seed -w @peoplepay360/api",
     "db:reset": "npm run db:reset -w @peoplepay360/api",
     "db:studio": "npm run db:studio -w @peoplepay360/api",
+    "docs:pdf": "node scripts/docs-to-pdf.mjs",
     "docker:up": "docker compose up -d --build",
     "docker:down": "docker compose down",
     "docker:logs": "docker compose logs -f"

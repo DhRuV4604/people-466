@@ -34,8 +34,9 @@ id nothing matches, so it sees an empty list rather than everyone's.
 
 ### Ids
 
-Every id is a **cuid**, not a UUID — validated by `IsEntityId` on DTOs and `ParseEntityIdPipe` on
-route parameters. A malformed id is a `400`, never a database error.
+Every primary key is a **UUIDv7** — validated by `IsEntityId` on DTOs and `ParseEntityIdPipe` on
+route parameters, not by `IsUUID`/`ParseUUIDPipe`. A malformed id is a `400`, never a database
+error. See [architecture.md](architecture.md#ids) for why the looser validator is the right one.
 
 ### Request bodies
 
