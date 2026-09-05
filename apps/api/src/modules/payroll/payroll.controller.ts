@@ -91,8 +91,11 @@ export class PayrunsController {
   @Post(':id/send-payslips')
   @RequirePermission('payruns', 'update')
   @ApiOperation({ summary: 'Bulk-deliver payslip PDFs to each employee' })
-  sendPayslips(@Param('id', ParseEntityIdPipe) id: string) {
-    return this.payruns.sendPayslips(id);
+  sendPayslips(
+    @Param('id', ParseEntityIdPipe) id: string,
+    @CurrentUser() user: AuthenticatedUser
+  ) {
+    return this.payruns.sendPayslips(id, user);
   }
 
   @Delete(':id')

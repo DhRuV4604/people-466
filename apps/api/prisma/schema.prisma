@@ -124,15 +124,17 @@ enum EmailStatus {
 // ---------------------------------------------------------------- Access control
 
 model User {
-  id           String    @id @default(cuid())
-  email        String    @unique
-  name         String
-  passwordHash String
-  role         String // EMPLOYEE | HR_MANAGER | HR_PAYROLL_USER | HR_PAYROLL_MANAGER | ADMIN
-  active       Boolean   @default(true)
-  employee     Employee?
-  createdAt    DateTime  @default(now())
-  updatedAt    DateTime  @updatedAt
+  id            String         @id @default(cuid())
+  email         String         @unique
+  name          String
+  passwordHash  String
+  role          String // EMPLOYEE | HR_MANAGER | HR_PAYROLL_USER | HR_PAYROLL_MANAGER | ADMIN
+  active        Boolean        @default(true)
+  employee      Employee?
+  auditLogs     AuditLog[]
+  notifications Notification[]
+  createdAt     DateTime       @default(now())
+  updatedAt     DateTime       @updatedAt
 }
 
 // ---------------------------------------------------------------- HR master data
@@ -571,4 +573,85 @@ model EmailLog {
   createdAt DateTime @default(now())
 
   @@index([payrunId])
+}
+
+// ---------------------------------------------------------------- Audit trail
+
+model AuditLog {
+  id String @id @default(cuid())
+
+  // Nullable and denormalised on purpose: the trail has to survive the account
+  // that made the change, so deleting a user must not take their history with
+  // them or leave rows that can no longer say who acted.
+  userId   String?
+  user     User?   @relation(fields: [userId], references: [id], onDelete: SetNull)
+  userName String
+  userRole String
+
+  action      AuditAction
+  /// Model name, e.g. "Employee". Free text rather than an enum so a new
+  /// resource does not need a migration to be auditable.
+  entity      String
+  entityId    String?
+  /// What the record was called at the time, so a deleted row still reads as
+  /// something a person recognises.
+  entityLabel String?
+
+  /// Field-level diff, `{ field: { from, to } }`. Null for a create or delete,
+  /// where the whole record is the change.
+  changes  Json?
+  /// The record as it was, for a delete. Nothing else can recover it.
+  snapshot Json?
+
+  method String
+  path   String
+  ip     String?
+
+  createdAt DateTime @default(now())
+
+  @@index([createdAt])
+  @@index([entity, entityId])
+  @@index([userId])
+  @@index([action])
+}
+
+enum AuditAction {
+  CREATE
+  UPDATE
+  DELETE
+  APPROVE
+  REFUSE
+  CANCEL
+  COMPUTE
+  VALIDATE
+  PAY
+  SEND
+  LOGIN
+}
+
+// ---------------------------------------------------------------- Notifications
+
+model Notification {
+  id String @id @default(cuid())
+
+  /// Who it is for. Notifications are per-recipient rows rather than one row
+  /// with many readers, so read state is simply a column.
+  userId String
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  /// Dotted event name, e.g. "leave.filed". The client maps it to an icon.
+  type  String
+  title String
+  body  String?
+  /// Where clicking it should go.
+  href  String?
+
+  /// Who caused it. Denormalised so the row reads correctly forever.
+  actorName String?
+
+  readAt    DateTime?
+  createdAt DateTime  @default(now())
+
+  @@index([userId, readAt])
+  @@index([userId, createdAt])
 }

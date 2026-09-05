@@ -22,6 +22,7 @@ const LABELS: Record<string, string> = {
   payslips: "Payslips",
   salary: "Salary",
   settings: "Settings",
+  audit: "Audit trail",
   profile: "My profile",
   new: "New",
 };

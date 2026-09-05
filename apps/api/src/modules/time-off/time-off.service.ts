@@ -28,6 +28,7 @@ import {
   RefuseRequestDto,
 } from './dto/time-off.dto';
 import { NO_MATCH_ID } from '../../common/scoping';
+import { NotificationsService } from '../notifications/notifications.service';
 
 export interface LeaveValidation {
   ok: boolean;
@@ -38,7 +39,10 @@ export interface LeaveValidation {
 
 @Injectable()
 export class TimeOffService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly notifications: NotificationsService
+  ) {}
 
   // ---------------------------------------------------------------- Types
 
@@ -453,10 +457,21 @@ export class TimeOffService {
   }
 
   async approveAllocation(id: string, user: AuthenticatedUser): Promise<LeaveAllocationDto> {
-    await this.prisma.leaveAllocation.update({
+    const approved = await this.prisma.leaveAllocation.update({
       where: { id },
       data: { status: 'APPROVED', approvedBy: user.name, approvedAt: new Date() },
+      include: { type: true },
     });
+
+    await this.notifications.notifyEmployees([approved.employeeId], {
+      type: 'allocation.approved',
+      title: `Your ${approved.type.name} allocation was approved`,
+      body: `${toNumber(approved.quantity)} ${approved.type.unit.toLowerCase()}(s) from ${day(approved.validFrom)}`,
+      href: '/time-off',
+      actorName: user.name,
+      actorId: user.userId,
+    });
+
     return this.findAllocationRaw(id);
   }
 
@@ -611,6 +626,18 @@ export class TimeOffService {
       include: { employee: { include: { department: true } }, type: true },
     });
 
+    // A request that approved itself has nothing for an approver to look at.
+    if (created.status === 'TO_APPROVE') {
+      await this.notifications.notifyPermission('timeOffRequests', 'approve', {
+        type: 'leave.filed',
+        title: `${created.employee.firstName} ${created.employee.lastName} requested ${created.type.name}`,
+        body: `${day(created.dateFrom)} to ${day(created.dateTo)}, ${toNumber(created.duration)} ${created.type.unit.toLowerCase()}(s)`,
+        href: '/time-off',
+        actorName: user.name,
+        actorId: user.userId,
+      });
+    }
+
     return this.requestToDto(created);
   }
 
@@ -715,6 +742,15 @@ export class TimeOffService {
       include: { employee: { include: { department: true } }, type: true },
     });
 
+    await this.notifications.notifyEmployees([updated.employeeId], {
+      type: 'leave.approved',
+      title: `Your ${updated.type.name} request was approved`,
+      body: `${day(updated.dateFrom)} to ${day(updated.dateTo)}`,
+      href: '/time-off',
+      actorName: user.name,
+      actorId: user.userId,
+    });
+
     return this.requestToDto(updated);
   }
 
@@ -737,6 +773,16 @@ export class TimeOffService {
       },
       include: { employee: { include: { department: true } }, type: true },
     });
+
+    await this.notifications.notifyEmployees([updated.employeeId], {
+      type: 'leave.refused',
+      title: `Your ${updated.type.name} request was refused`,
+      body: updated.refuseReason,
+      href: '/time-off',
+      actorName: user.name,
+      actorId: user.userId,
+    });
+
     return this.requestToDto(updated);
   }
 
@@ -760,4 +806,9 @@ export class TimeOffService {
     await this.prisma.leaveRequest.delete({ where: { id } });
     return { deleted: true };
   }
+}
+
+/** Date only: a notification line has no use for the time. */
+function day(date: Date): string {
+  return date.toISOString().slice(0, 10);
 }

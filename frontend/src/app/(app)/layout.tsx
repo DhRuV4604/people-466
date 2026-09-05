@@ -3,6 +3,7 @@ import { redirect } from "next/navigation";
 
 import { AppBreadcrumbs } from "@/components/app/app-breadcrumbs";
 import { AppSidebar } from "@/components/app/app-sidebar";
+import { Notifications } from "@/components/app/notifications";
 import {
   SidebarInset,
   SidebarProvider,
@@ -43,6 +44,7 @@ export default async function AppLayout({
         <header className="sticky top-0 z-10 flex h-16 shrink-0 items-center gap-3 border-b border-border bg-background/80 px-4 backdrop-blur-sm sm:px-6">
           <SidebarTrigger className="-ml-1" />
           <AppBreadcrumbs hasOverview={home === "/"} />
+          <Notifications />
           {/* Right-aligned: it belongs to the window rather than to the page,
               so it sits away from the trail that names where you are. */}
           <ThemeTogglerButton

@@ -93,6 +93,37 @@ export type PayslipStatus = (typeof PAYSLIP_STATUSES)[number];
 export const EMAIL_STATUSES = ['QUEUED', 'SENT', 'FAILED'] as const;
 export type EmailStatus = (typeof EMAIL_STATUSES)[number];
 
+/** What an audited action did. Wider than CRUD, because approving or paying is
+ *  the thing someone will actually search the trail for. */
+export const AUDIT_ACTIONS = [
+  'CREATE',
+  'UPDATE',
+  'DELETE',
+  'APPROVE',
+  'REFUSE',
+  'CANCEL',
+  'COMPUTE',
+  'VALIDATE',
+  'PAY',
+  'SEND',
+  'LOGIN',
+] as const;
+export type AuditAction = (typeof AUDIT_ACTIONS)[number];
+
+export const AUDIT_ACTION_LABELS: Record<AuditAction, string> = {
+  CREATE: 'Created',
+  UPDATE: 'Edited',
+  DELETE: 'Deleted',
+  APPROVE: 'Approved',
+  REFUSE: 'Refused',
+  CANCEL: 'Cancelled',
+  COMPUTE: 'Computed',
+  VALIDATE: 'Validated',
+  PAY: 'Marked paid',
+  SEND: 'Sent',
+  LOGIN: 'Signed in',
+};
+
 /** Deductions and contributions reduce net pay; every other category adds to it. */
 export function isNegativeCategory(category: string): boolean {
   return category === 'DEDUCTION' || category === 'CONTRIBUTION';

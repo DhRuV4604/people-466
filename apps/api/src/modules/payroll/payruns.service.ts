@@ -10,6 +10,7 @@ import { toNumber, round2 } from '../../common/decimal';
 import { ContractsService } from '../contracts/contracts.service';
 import { PayslipsService } from './payslips.service';
 import { MailService } from './mail.service';
+import { NotificationsService } from '../notifications/notifications.service';
 import type { AuthenticatedUser } from '../auth/auth.types';
 import { CreatePayrunDto, QueryPayrunsDto, EligibilityQueryDto } from './dto/payroll.dto';
 
@@ -36,7 +37,8 @@ export class PayrunsService {
     private readonly prisma: PrismaService,
     private readonly contracts: ContractsService,
     private readonly payslips: PayslipsService,
-    private readonly mail: MailService
+    private readonly mail: MailService,
+    private readonly notifications: NotificationsService
   ) {}
 
   private toDto(p: PayrunRow): PayrunDto {
@@ -330,6 +332,15 @@ export class PayrunsService {
       }),
     ]);
 
+    await this.notifications.notifyPermission('payruns', 'update', {
+      type: 'payrun.validated',
+      title: `Pay run "${payrun.name}" was validated`,
+      body: 'It can now be marked as paid.',
+      href: `/payruns/${id}`,
+      actorName: user.name,
+      actorId: user.userId,
+    });
+
     return this.findOne(id, user);
   }
 
@@ -348,17 +359,59 @@ export class PayrunsService {
       }),
     ]);
 
+    const paid = await this.prisma.payslip.findMany({
+      where: { payrunId: id },
+      select: { employeeId: true },
+    });
+
+    await this.notifications.notifyPermission('payslips', 'read', {
+      type: 'payrun.paid',
+      title: `Pay run "${payrun.name}" was marked paid`,
+      body: `${paid.length} payslip(s) released.`,
+      href: `/payruns/${id}`,
+      actorName: user.name,
+      actorId: user.userId,
+    });
+
+    // The people it pays are not in payslips:read - the matrix gives an Employee
+    // no payslip access at all - so they are told separately, and with no href
+    // because there is no page their role can open.
+    await this.notifications.notifyEmployees(
+      paid.map((p) => p.employeeId),
+      {
+        type: 'payslip.paid',
+        title: 'Your payslip has been paid',
+        body: `${payrun.name} was released for payment.`,
+        actorName: user.name,
+        actorId: user.userId,
+      }
+    );
+
     return this.findOne(id, user);
   }
 
-  async sendPayslips(id: string): Promise<{ sent: number; failed: number }> {
+  async sendPayslips(
+    id: string,
+    user: AuthenticatedUser
+  ): Promise<{ sent: number; failed: number }> {
     const payrun = await this.prisma.payrun.findUnique({ where: { id } });
     if (!payrun) throw new NotFoundException('Pay run not found.');
     if (payrun.status === 'DRAFT') {
       throw new BadRequestException('Compute and validate the pay run before sending payslips.');
     }
 
-    return this.mail.sendPayrunPayslips(id);
+    const result = await this.mail.sendPayrunPayslips(id);
+
+    // The one notification that does go to its own actor: a bulk send renders and
+    // mails every payslip, so the counts are news even to the person who asked.
+    await this.notifications.notify([user.userId], {
+      type: 'payslip.sent',
+      title: `Payslips sent for "${payrun.name}"`,
+      body: `${result.sent} sent, ${result.failed} failed.`,
+      href: `/payruns/${id}`,
+    });
+
+    return result;
   }
 
   async remove(id: string): Promise<{ deleted: true }> {

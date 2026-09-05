@@ -20,7 +20,8 @@ export type Module =
   | 'salaryStructures'
   | 'salaryRules'
   | 'dashboard'
-  | 'users';
+  | 'users'
+  | 'auditLogs';
 
 export type Action = 'read' | 'create' | 'update' | 'delete' | 'approve';
 
@@ -48,6 +49,8 @@ const employeeMatrix: RoleMatrix = {
   salaryRules: NONE,
   dashboard: NONE,
   users: NONE,
+  // The trail records what everyone did, so only an admin may read it.
+  auditLogs: NONE,
 };
 
 // HR Manager has no payroll access at all - that exception is the reason this
@@ -66,6 +69,8 @@ const hrManagerMatrix: RoleMatrix = {
   salaryRules: NONE,
   dashboard: NONE,
   users: NONE,
+  // The trail records what everyone did, so only an admin may read it.
+  auditLogs: NONE,
 };
 
 const hrPayrollUserMatrix: RoleMatrix = {
@@ -99,6 +104,9 @@ const adminMatrix: RoleMatrix = {
   salaryRules: FULL,
   dashboard: FULL,
   users: FULL,
+  // Read only, for everyone including the admin: a trail that can be edited or
+  // pruned by the people it records is not a trail.
+  auditLogs: READ,
 };
 
 const MATRIX: Record<Role, RoleMatrix> = {

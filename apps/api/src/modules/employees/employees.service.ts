@@ -1,7 +1,9 @@
 import { Injectable, NotFoundException, BadRequestException } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
+import { scopeToOwnRecords } from '@peoplepay360/shared';
 import type { EmployeeSummaryDto, EmployeeDetailDto } from '@peoplepay360/shared';
 import { PrismaService } from '../../prisma/prisma.service';
+import { NotificationsService } from '../notifications/notifications.service';
 import type { AuthenticatedUser } from '../auth/auth.types';
 import { CreateEmployeeDto, UpdateEmployeeDto, QueryEmployeesDto } from './dto/employee.dto';
 import { NO_MATCH_ID } from '../../common/scoping';
@@ -17,7 +19,10 @@ type EmployeeSummaryRow = Prisma.EmployeeGetPayload<{ include: typeof SUMMARY_IN
 
 @Injectable()
 export class EmployeesService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly notifications: NotificationsService
+  ) {}
 
   private toSummary(e: EmployeeSummaryRow): EmployeeSummaryDto {
     return {
@@ -153,6 +158,22 @@ export class EmployeesService {
         workingScheduleId: dto.workingScheduleId ?? null,
       },
     });
+
+    // Every role that can read an employee is told, except the Employee role:
+    // it only ever sees itself, so a new colleague is not its news.
+    await this.notifications.notifyPermission(
+      'employees',
+      'read',
+      {
+        type: 'employee.created',
+        title: `${created.firstName} ${created.lastName} joined`,
+        body: `Employee ${created.employeeCode} was added.`,
+        href: `/employees/${created.id}`,
+        actorName: user.name,
+        actorId: user.userId,
+      },
+      (role) => !scopeToOwnRecords(role)
+    );
 
     return this.findOne(created.id, user);
   }

@@ -5,6 +5,7 @@
  * rather than pretending they are `Date` objects.
  */
 import type {
+  AuditAction,
   Role,
   EmployeeType,
   EmployeeStatus,
@@ -422,4 +423,48 @@ export interface DashboardDto {
   };
   payrunStatusBreakdown: { status: string; count: number }[];
   employeeTypeBreakdown: { type: string; count: number }[];
+}
+
+// ---------------------------------------------------------------- Audit trail
+
+/** One field that changed, as it was and as it became. */
+export interface AuditChange {
+  field: string;
+  from: unknown;
+  to: unknown;
+}
+
+export interface AuditLogDto {
+  id: string;
+  /** Null once the account has been removed; userName still names who acted. */
+  userId: string | null;
+  userName: string;
+  userRole: Role;
+  action: AuditAction;
+  entity: string;
+  entityId: string | null;
+  entityLabel: string | null;
+  changes: AuditChange[];
+  method: string;
+  path: string;
+  ip: string | null;
+  createdAt: ISODate;
+}
+
+// ---------------------------------------------------------------- Notifications
+
+export interface NotificationDto {
+  id: string;
+  type: string;
+  title: string;
+  body: string | null;
+  href: string | null;
+  actorName: string | null;
+  readAt: ISODate | null;
+  createdAt: ISODate;
+}
+
+export interface NotificationSummaryDto {
+  unread: number;
+  items: NotificationDto[];
 }

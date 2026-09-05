@@ -14,6 +14,7 @@ import { TimeOffModule } from './modules/time-off/time-off.module';
 import { PayrollModule } from './modules/payroll/payroll.module';
 import { ConfigDataModule } from './modules/config/config-data.module';
 import { DashboardModule } from './modules/dashboard/dashboard.module';
+import { NotificationsModule } from './modules/notifications/notifications.module';
 import { HealthController } from './health.controller';
 
 @Module({
@@ -28,6 +29,7 @@ import { HealthController } from './health.controller';
     PayrollModule,
     ConfigDataModule,
     DashboardModule,
+    NotificationsModule,
   ],
   controllers: [HealthController],
   providers: [

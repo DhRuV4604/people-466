@@ -41,6 +41,7 @@ const MODULE_LABELS: Record<Module, string> = {
   salaryRules: "Salary rules",
   dashboard: "Dashboard",
   users: "Users",
+  auditLogs: "Audit trail",
 };
 
 const ACTIONS: Action[] = ["read", "create", "update", "delete", "approve"];
