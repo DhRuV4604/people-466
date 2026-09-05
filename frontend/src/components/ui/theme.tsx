@@ -73,10 +73,13 @@ function apply(theme: Theme): Resolved {
 
 export function ThemeProvider({ children }: { children: React.ReactNode }) {
   // The server cannot know the preference, so it renders the light default and
-  // the head script corrects it before paint. State starts from what that
-  // script already decided.
-  const [theme, setThemeState] = React.useState<Theme>("system");
-  const [resolvedTheme, setResolved] = React.useState<Resolved>("light");
+  // the head script corrects it before paint. Kept as one piece of state rather
+  // than two, so adopting the stored preference is a single update rather than
+  // a pair that renders twice.
+  const [state, setState] = React.useState<{
+    theme: Theme;
+    resolvedTheme: Resolved;
+  }>({ theme: "system", resolvedTheme: "light" });
 
   React.useEffect(() => {
     const stored = (() => {
@@ -86,23 +89,27 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
         return null;
       }
     })();
-    const initial = stored ?? "system";
-    setThemeState(initial);
-    setResolved(apply(initial));
+    const theme = stored ?? "system";
+    // The stored preference is browser state the server cannot know, so the
+    // earliest React can read it is after mount. The head script has already
+    // applied it to the document, so this only brings React's copy into line
+    // and nothing repaints.
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    setState({ theme, resolvedTheme: apply(theme) });
   }, []);
 
   // Following the system means following it as it changes, not only at load.
   React.useEffect(() => {
-    if (theme !== "system") return;
+    if (state.theme !== "system") return;
     const query = window.matchMedia("(prefers-color-scheme: dark)");
-    const onChange = () => setResolved(apply("system"));
+    const onChange = () =>
+      setState({ theme: "system", resolvedTheme: apply("system") });
     query.addEventListener("change", onChange);
     return () => query.removeEventListener("change", onChange);
-  }, [theme]);
+  }, [state.theme]);
 
   const setTheme = React.useCallback((next: Theme) => {
-    setThemeState(next);
-    setResolved(apply(next));
+    setState({ theme: next, resolvedTheme: apply(next) });
     try {
       localStorage.setItem(THEME_STORAGE_KEY, next);
     } catch {
@@ -111,8 +118,8 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
   }, []);
 
   const value = React.useMemo(
-    () => ({ theme, resolvedTheme, setTheme }),
-    [theme, resolvedTheme, setTheme],
+    () => ({ ...state, setTheme }),
+    [state, setTheme],
   );
 
   return (

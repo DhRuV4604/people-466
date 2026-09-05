@@ -5,24 +5,27 @@
   "description": "Integrated HR & Payroll operations platform",
   "workspaces": [
     "packages/*",
-    "apps/*"
+    "apps/*",
+    "frontend"
   ],
   "scripts": {
-    "db:up": "docker compose up -d db",
-    "db:down": "docker compose down",
-    "db:migrate": "npm run db:migrate -w @peoplepay360/api",
-    "db:seed": "npm run db:seed -w @peoplepay360/api",
-    "db:reset": "npm run db:reset -w @peoplepay360/api",
-    "db:studio": "npm run db:studio -w @peoplepay360/api",
     "setup": "npm run db:up && npm run build -w @peoplepay360/shared && npm run db:migrate && npm run db:seed",
     "dev": "concurrently -n api,web -c cyan,magenta \"npm run dev -w @peoplepay360/api\" \"npm run dev -w @peoplepay360/web\"",
     "dev:api": "npm run dev -w @peoplepay360/api",
     "dev:web": "npm run dev -w @peoplepay360/web",
     "build": "npm run build -w @peoplepay360/shared && npm run build -w @peoplepay360/api && npm run build -w @peoplepay360/web",
     "typecheck": "npm run typecheck -w @peoplepay360/shared && npm run typecheck -w @peoplepay360/api && npm run typecheck -w @peoplepay360/web",
+    "lint": "npm run lint -w @peoplepay360/web",
     "test": "npm run test -w @peoplepay360/api",
+    "db:up": "docker compose up -d db",
+    "db:down": "docker compose down",
+    "db:migrate": "npm run db:migrate -w @peoplepay360/api",
+    "db:seed": "npm run db:seed -w @peoplepay360/api",
+    "db:reset": "npm run db:reset -w @peoplepay360/api",
+    "db:studio": "npm run db:studio -w @peoplepay360/api",
     "docker:up": "docker compose up -d --build",
-    "docker:down": "docker compose down"
+    "docker:down": "docker compose down",
+    "docker:logs": "docker compose logs -f"
   },
   "devDependencies": {
     "concurrently": "^9.1.2",
@@ -30,5 +33,8 @@
   },
   "engines": {
     "node": ">=20"
+  },
+  "overrides": {
+    "postcss": "^8.5.28"
   }
 }

@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
+import Script from "next/script";
 import "./globals.css";
 
 import { THEME_SCRIPT, ThemeProvider } from "@/components/ui/theme";
@@ -30,13 +31,16 @@ export default function RootLayout({ children }: LayoutProps<"/">) {
       className={`${geistSans.variable} ${geistMono.variable} h-full antialiased`}
       suppressHydrationWarning
     >
-      <head>
-        {/* Applies the remembered theme before the first paint, so the page is
-            never briefly the wrong colour. It sits in the head rather than the
-            React tree, which is what keeps it out of hydration. */}
-        <script dangerouslySetInnerHTML={{ __html: THEME_SCRIPT }} />
-      </head>
       <body className="flex min-h-dvh flex-col bg-background text-foreground">
+        {/* Applies the remembered theme before the first paint, so the page is
+            never briefly the wrong colour. `beforeInteractive` hoists it out of
+            the React tree into the document itself, which is what keeps it from
+            taking part in hydration — a plain <script> here, or a hand-rolled
+            <head>, breaks hydration at the <html> element. */}
+        <Script id="theme" strategy="beforeInteractive">
+          {THEME_SCRIPT}
+        </Script>
+
         {/* The palette carries a full dark set, so the choice is the user's.
             Unset means following whatever they told their machine. */}
         <ThemeProvider>

@@ -7,14 +7,15 @@
     "build": "prisma generate && nest build",
     "dev": "prisma generate && nest start --watch",
     "start": "node dist/src/main.js",
-    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "typecheck": "prisma generate && tsc -p tsconfig.json --noEmit",
     "test": "jest --config jest.config.js",
     "test:watch": "jest --config jest.config.js --watch",
     "db:migrate": "prisma migrate dev --name init",
     "db:deploy": "prisma migrate deploy",
     "db:seed": "tsx prisma/seed.ts",
     "db:reset": "prisma migrate reset --force",
-    "db:studio": "prisma studio"
+    "db:studio": "prisma studio",
+    "postinstall": "prisma generate"
   },
   "prisma": {
     "seed": "tsx prisma/seed.ts"

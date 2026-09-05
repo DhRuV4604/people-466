@@ -1,193 +1,167 @@
 # PeoplePay360 — HR & Payroll
 
-An integrated human resource and payroll operations platform. The employee record is the
-central hub; contracts and working schedules supply payroll context, attendance and time off
-capture daily activity, salary structures and rules define computation, and pay runs turn
-eligible employees into validated payslips that can be printed as PDF and emailed.
-
-## Architecture
-
-A workspace monorepo with a clean separation between the API, the web client, and the domain
-contracts they share.
+An integrated HR and payroll platform. The employee record is the hub: contracts and working
+schedules supply the payroll context, attendance and time off capture what actually happened,
+salary structures and rules define how pay is computed, and a pay run turns eligible employees
+into validated payslips that can be downloaded as PDF or emailed.
 
 ```
-peoplepay360/
-├── apps/
-│   ├── api/                  NestJS REST API — the only thing that touches the database
-│   │   ├── prisma/           schema + migrations + seed
-│   │   └── src/
-│   │       ├── common/       cross-cutting: decorators, filters, decimal helpers
-│   │       ├── config/       typed configuration
-│   │       ├── prisma/       database module
-│   │       └── modules/      one folder per bounded context
-│   │           ├── auth/         JWT strategy, guards, login
-│   │           ├── employees/    controller → service → Prisma
-│   │           ├── contracts/    period-scoped contract resolution
-│   │           ├── attendance/   punches, exceptions, corrections
-│   │           ├── time-off/     types, allocations, requests
-│   │           ├── payroll/      engine, payslips, pay runs, PDF, mail
-│   │           ├── config/       schedules, departments, positions, users
-│   │           └── dashboard/    live aggregation
-│   └── web/                  Next.js client — no database access at all
-│       └── src/
-│           ├── lib/          API client + session handling
-│           ├── components/   shared UI
-│           └── app/          routes, server actions
-└── packages/
-    └── shared/               types, enums, RBAC matrix, pure domain maths
+┌──────────────┐        ┌──────────────┐        ┌──────────────┐
+│   frontend   │  HTTP  │   apps/api   │  SQL   │  PostgreSQL  │
+│   Next.js    │ ─────► │    NestJS    │ ─────► │      16      │
+│    :3000     │ bearer │    :4000     │ Prisma │    :5433     │
+└──────────────┘        └──────────────┘        └──────────────┘
+        │                       │
+        └───────┬───────────────┘
+                ▼
+     packages/shared — types, enums, RBAC matrix, domain maths
 ```
 
-**Why this shape.** The API owns every database read and write, so authorisation cannot be
-bypassed by calling a different client. The web app holds only a session cookie and an HTTP
-client. The `shared` package carries the pieces both genuinely need — the RBAC matrix, the
-transport DTOs, and pure calculations like weekly-hours derivation — so the client can preview
-a value using the exact function the server will use to persist it.
-
-**Layering inside the API.** Controllers handle HTTP and permissions; services hold business
-logic and are the only callers of Prisma; DTOs validate input at the boundary with
-`class-validator`. Guards run globally, so a new route is authenticated by default and must
-opt out explicitly with `@Public()`.
-
-## Stack
-
-NestJS 11 · Prisma 6 · PostgreSQL 16 · Next.js 15 · TypeScript · Tailwind · Recharts · PDFKit
+The API is the only thing that touches the database, so authorisation cannot be sidestepped by
+calling a different client. The web app holds a session cookie and an HTTP client, nothing more.
 
 ## Getting started
 
-Requires Node 20+ and Docker.
-
-```bash
-npm install
-cp apps/api/.env.example apps/api/.env
-cp apps/web/.env.example apps/web/.env.local
-npm run setup     # start Postgres, build shared, migrate, seed
-npm run dev       # API on :4000, web on :3000
-```
-
-Open http://localhost:3000. API docs (Swagger) are at http://localhost:4000/api/docs.
-
-Postgres runs on **5433**, not the default 5432, so it cannot collide with another Postgres
-already running on your machine.
+Requires **Node 20+** and **Docker**.
 
 ### Everything in Docker
 
 ```bash
-npm run docker:up      # db + api + web
-npm run docker:down
+cp .env.example .env      # optional; every value has a working default
+npm run docker:up         # builds and starts db + api + web
 ```
 
-### Useful scripts
+Open <http://localhost:3000>. That is the whole setup — the API applies its migrations and
+seeds the database on a fresh volume.
+
+### Running locally against a dockerised database
+
+```bash
+npm install
+npm run setup             # start Postgres, build shared, migrate, seed
+npm run dev               # API on :4000, web on :3000
+```
+
+| Service | URL |
+|---|---|
+| Web | <http://localhost:3000> |
+| API | <http://localhost:4000/api> |
+| API reference (Swagger) | <http://localhost:4000/api/docs> |
+| Component styleguide | <http://localhost:3000/styleguide> |
+
+Postgres is published on **5433**, not 5432, so it cannot collide with another Postgres already
+running on your machine.
+
+### Sign in
+
+Every seeded account uses the password `password123`.
+
+| Email | Role | What it can reach |
+|---|---|---|
+| `admin@peoplepay360.com` | Admin | Everything, including user management |
+| `payroll@peoplepay360.com` | HR Payroll Manager | All HR, plus payroll and salary configuration |
+| `hr@peoplepay360.com` | HR Manager | All HR. **No payroll at all** |
+| `employee@peoplepay360.com` | Employee | Only their own records |
+
+Each role lands on the first screen it can actually open, so the Employee and HR Manager
+accounts start at Employees rather than the overview.
+
+## Layout
+
+```
+people-466/
+├── apps/api/               NestJS REST API — the only database client
+│   ├── prisma/             schema, migrations, seed
+│   └── src/
+│       ├── common/         guards, filters, decorators, validation, decimals
+│       ├── prisma/         database module
+│       └── modules/        auth · employees · contracts · attendance
+│                           time-off · payroll · config · dashboard
+├── frontend/               Next.js 16 web client
+│   └── src/
+│       ├── app/            routes and server actions
+│       ├── components/     ui (library) · data (lists) · form (writes) · app (shell)
+│       └── lib/            api client, session, access, fields, mutations, formatting
+├── packages/shared/        types, enums, RBAC matrix, pure domain maths
+├── docker-compose.yml      db + api + web
+└── docs/                   see below
+```
+
+## Documentation
+
+| Document | What it covers |
+|---|---|
+| [docs/architecture.md](docs/architecture.md) | How the three packages fit, request flow, sessions, RBAC |
+| [docs/frontend.md](docs/frontend.md) | Component library, the form and mutation spine, adding a screen |
+| [docs/api.md](docs/api.md) | Every endpoint, and the conventions they share |
+| [docs/data-model.md](docs/data-model.md) | The entities, their relationships, and the payroll engine |
+| [docs/operations.md](docs/operations.md) | Environment, Docker, migrations, deployment, troubleshooting |
+
+## Commands
 
 | Command | Purpose |
 |---|---|
-| `npm run dev` | Run API and web together |
-| `npm run dev:api` / `npm run dev:web` | Run one side only |
-| `npm run build` | Build shared, API and web |
-| `npm run typecheck` | Typecheck all three packages |
+| `npm run dev` | API and web together |
+| `npm run dev:api` / `npm run dev:web` | One side only |
+| `npm run build` | Build shared, then API, then web |
+| `npm run typecheck` | Typecheck all three workspaces |
+| `npm run lint` | Lint the web client |
+| `npm run test` | API tests |
 | `npm run db:migrate` | Create and apply a migration |
+| `npm run db:seed` | Seed the database |
 | `npm run db:reset` | Drop, re-migrate and reseed |
 | `npm run db:studio` | Prisma Studio |
+| `npm run docker:up` / `docker:down` / `docker:logs` | The full stack |
 
-### Demo accounts
+## Stack
 
-All use the password `password123`.
-
-| Email | Role | Sees |
-|---|---|---|
-| `admin@peoplepay360.com` | Admin | Everything, including user management |
-| `payroll@peoplepay360.com` | HR Payroll Manager | All HR plus full payroll and salary configuration |
-| `hr@peoplepay360.com` | HR Manager | All HR; **no** payroll access |
-| `employee@peoplepay360.com` | Employee | Own records only, via My Space |
+NestJS 11 · Prisma 6 · PostgreSQL 16 · Next.js 16 · React 19 · TypeScript 5 ·
+Tailwind CSS 4 · Animate UI + Radix · Motion · PDFKit
 
 ## Seed data
 
-25 employees across 5 departments, 46 contracts (including expired ones so period-based
-resolution is observable), ~1,650 attendance records over three months, 4 time off types with
+25 employees across 5 departments, 46 contracts including expired ones so period resolution is
+observable, roughly 1,650 attendance records over three months, 4 time off types with
 allocations and requests, 2 salary structures with 15 sequenced rules, and 2 completed pay runs
-so dashboard trends have real history.
+so the dashboard has real history.
 
-Some imperfections are intentional, so the warning paths are demonstrable rather than
+Some of it is deliberately imperfect, so the warning paths are demonstrable rather than
 theoretical: two employees have no bank details, several attendance records are missing a
 check-out or were manually corrected, and some contracts expire within 30 days.
 
-## Business rules
+## What the rules actually are
 
-Implemented in application logic, not hardcoded values.
+These live in application logic rather than as hardcoded values. [docs/data-model.md](docs/data-model.md)
+covers each in detail.
 
-**Period-scoped contracts** — `apps/api/src/modules/contracts/`
-An employee may hold many contracts over time. Payroll resolves the single `RUNNING` contract
-whose date range overlaps the payroll period; expired contracts are never used. Creating
-overlapping running contracts is rejected at save time.
+- **Contracts are period-scoped.** An employee may hold many over time; payroll resolves the one
+  `RUNNING` contract whose dates overlap the period. Overlapping running contracts are rejected
+  at save time.
+- **Weekly hours are derived**, never accepted from a client — always from the day, start, end
+  and break pattern, with overnight shifts rolling over correctly.
+- **Leave balance is derived**, never stored: approved allocations minus approved requests.
+  Approving a request links it to a specific allocation, so consumption is auditable.
+- **Salary rules run in sequence**, each result entering scope under its code, so `NET` is
+  literally `GROSS - PF - PT - TDS - ULD` rather than a hardcoded sum.
+- **Payroll warnings block validation** — duplicate payslips, missing bank details, no applicable
+  contract, negative net pay.
+- **Money is `NUMERIC`**, never a float, so totals reconcile to the cent.
 
-**Schedule-derived hours** — `packages/shared/src/domain.ts`
-Weekly hours are always computed from the day/start/end/break pattern and never accepted from a
-client. Overnight shifts (22:00 → 06:00) roll over correctly. Period working days come from the
-schedule rather than a flat 30-day assumption.
+## Security
 
-**Allocation-backed leave** — `apps/api/src/modules/time-off/`
-Balance is derived as approved allocations minus approved requests, never stored. Approving a
-request links it to a specific allocation so consumption is auditable. Requests are blocked when
-they overlap existing leave, exceed the remaining balance, or breach a per-request cap. Leave
-duration counts only scheduled working days.
-
-**Attendance exceptions** — `apps/api/src/modules/attendance/`
-Worked hours, overtime and status are derived from the punches plus that weekday's schedule.
-Late arrival, half day and missing check-out are detected automatically. Manual corrections
-record who changed the record, when, and why.
-
-**Sequenced salary rules** — `apps/api/src/modules/payroll/payroll-engine.service.ts`
-Rules execute in ascending sequence, and each result enters scope under its code so later rules
-build on earlier subtotals — `NET` is literally `GROSS - PF - PT - TDS - ULD`, not a hardcoded
-sum. Rules support fixed amounts, percentages of another rule, and formulas, with an optional
-condition that skips the rule entirely. Formulas are validated before being stored.
-
-Formulas evaluate in a restricted scope: dangerous identifiers are rejected before evaluation
-and globals are shadowed, so a formula cannot reach the host environment.
-
-**Payroll warnings** — surfaced before validation, and validation is blocked while any remain:
-duplicate payslips covering the same period, missing bank details, no applicable contract, and
-negative net pay.
-
-**Money precision** — all currency and hour columns are PostgreSQL `NUMERIC`, not floats, so
-payroll totals reconcile to the cent. Values are normalised to plain numbers at the API
-boundary.
-
-## Security notes
-
-- The JWT lives in an **httpOnly** cookie, so client-side JavaScript can never read it. The
-  Next.js server attaches it as a bearer token when calling the API.
-- Payslip PDFs are fetched through a small Next.js proxy route, because a browser cannot set an
+- The JWT lives in an **httpOnly** cookie. Client-side JavaScript can never read it; the Next.js
+  server attaches it as a bearer token when calling the API.
+- Payslip PDFs go through a small Next.js proxy route, because a browser cannot set an
   `Authorization` header on a plain link. The proxy reads the cookie server-side.
 - Every token is re-checked against the database on each request, so a deactivated account or a
-  changed role takes effect immediately rather than at token expiry.
+  changed role takes effect immediately rather than at expiry.
+- Client-side permission checks decide what is *offered*. The API re-checks every request and is
+  the actual boundary.
 - The API refuses to boot in production if `JWT_SECRET` is shorter than 32 characters.
-- Requests with unknown body fields are rejected outright rather than silently stripped.
-
-## End-to-end flows to demo
-
-**Employee to payslip**
-1. Employees → open an employee → smart buttons show related Contracts, Attendance, Time Off,
-   Allocations and Payslips, each opening a filtered list.
-2. Payroll → Pay Runs → New. Step 1 sets structure and period; **Continue creates nothing**.
-   Step 2 lists only eligible staff, showing exactly why anyone is excluded.
-3. Create Pay Run → Compute → review warnings → Validate → Mark Paid → Send Payslips.
-4. Open any payslip for the rule-by-rule breakdown, then Print Payslip (PDF).
-
-**Leave allocation to request**
-1. Time Off → Time Off Types → inspect a policy (unit, allocation requirement, paid flag).
-2. Time Off → Allocations → New → grant a balance → Approve.
-3. Time Off → Requests → New → the form shows the live balance and blocks over-draw.
-4. Approve the request → the linked allocation is drawn down and visible on both records.
-
-## Email delivery
-
-With no `SMTP_HOST` set on the API, **Send Payslips** records each message in the in-app Email
-Outbox (Payroll → Email Outbox) with its genuinely generated PDF attachment, so the bulk flow is
-fully demonstrable without credentials. Setting `SMTP_HOST` switches to live sending via
-Nodemailer (`npm i nodemailer -w @peoplepay360/api`).
+- Request bodies carrying unknown fields are rejected outright rather than silently stripped.
 
 ## Roadmap
 
 Approval chains with delegation; payroll journal export to accounting; employee document
-storage; multi-currency and multi-company; biometric or geofenced attendance capture; statutory
-report generation; and a scheduled job to auto-close contracts and expire allocations.
+storage; multi-currency and multi-company; biometric or geofenced attendance; statutory report
+generation; and a scheduled job to auto-close contracts and expire allocations.

@@ -8,7 +8,7 @@ RUN apk add --no-cache openssl
 COPY package.json package-lock.json ./
 COPY packages/shared/package.json packages/shared/
 COPY apps/api/package.json apps/api/
-COPY apps/web/package.json apps/web/
+COPY frontend/package.json frontend/
 RUN npm ci
 
 FROM deps AS build
