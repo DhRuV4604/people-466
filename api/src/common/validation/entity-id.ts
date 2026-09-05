@@ -3,10 +3,11 @@ import { applyDecorators } from '@nestjs/common';
 import { IsString, Matches } from 'class-validator';
 
 /**
- * Primary keys in this schema are cuids (`@default(cuid())` in schema.prisma),
- * not UUIDs. Validating them with `IsUUID` or `ParseUUIDPipe` rejects every
- * real id, so both the by-id routes and the relation filters use these
- * instead.
+ * Primary keys in this schema are UUIDv7 (`@default(uuid(7))` in schema.prisma).
+ * The unconstrained id-bearing columns that carry no foreign key -
+ * `AuditLog.entityId`, `Attendance.editedById`, the `approvedBy`/`refusedBy`/
+ * `paidBy` audit fields - stay plain text and are not guaranteed to be UUIDs,
+ * so `IsUUID`/`ParseUUIDPipe` are still the wrong tool for the shared case.
  *
  * The pattern is deliberately loose: it rejects empty strings and obvious
  * junk without hard-coding a cuid version, so switching id strategy later does
