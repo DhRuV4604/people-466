@@ -565,6 +565,36 @@ function TaskCard({ task, period }: { task: DashboardTask; period: string }) {
 }
 
 /**
+ * Today, on the viewer's own clock.
+ *
+ * Rendered from `new Date()` during both passes rather than set in an effect,
+ * with the mismatch suppressed: the server's day and the reader's can differ by
+ * a timezone, and the reader's is the one that is true for them. There is
+ * nothing to reconcile, so there is nothing worth a re-render to reconcile it.
+ */
+function Today() {
+  const now = new Date();
+  return (
+    <span
+      suppressHydrationWarning
+      className="ml-auto text-sm text-muted-foreground"
+    >
+      {/* Said outright, because the line beside it names a different month:
+          the dashboard reports August while today is September, and a bare
+          date there would read as part of the period rather than the clock. */}
+      <span className="text-muted-foreground/60">Today is</span>{" "}
+      <span className="font-medium text-foreground/80">
+        {now.toLocaleDateString(undefined, {
+          weekday: "long",
+          day: "numeric",
+          month: "long",
+        })}
+      </span>
+    </span>
+  );
+}
+
+/**
  * What needs doing, before the numbers describing what has been done.
  *
  * A row of cards rather than a list: these are unrelated to each other, and a
@@ -605,6 +635,7 @@ export function TaskStrip({
           {total === 1 ? "1 thing" : `${total} things`} to sort out
         </span>
         <span className="text-sm text-muted-foreground/60">· {period}</span>
+        <Today />
       </div>
       {/* Scrolls sideways rather than wrapping: the cards are ordered by
           urgency, and wrapping would put the least urgent one beside the most.

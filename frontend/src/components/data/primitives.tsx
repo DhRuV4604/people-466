@@ -24,7 +24,7 @@ export function StatTile({
   return (
     <div
       className={cn(
-        "rounded-xl border border-border bg-card p-5",
+        "rounded-xl border border-border bg-card p-4",
         tone === "accent" && "border-primary/30 bg-primary/[0.03]",
         tone === "danger" && "border-destructive/30 bg-destructive/[0.03]",
       )}
@@ -32,7 +32,7 @@ export function StatTile({
       <p className="text-xs text-muted-foreground">{label}</p>
       <p
         className={cn(
-          "mt-1 text-2xl font-semibold tracking-tight tabular-nums",
+          "mt-1 text-xl font-semibold tracking-tight tabular-nums",
           tone === "danger" && "text-destructive",
         )}
       >
@@ -45,9 +45,26 @@ export function StatTile({
   );
 }
 
-export function StatGrid({ children }: { children: React.ReactNode }) {
+export function StatGrid({
+  children,
+  columns = 4,
+}: {
+  children: React.ReactNode;
+  /**
+   * How many fit on a wide screen. Four is the usual; five is for a row that
+   * has one more thing worth saying than it has room for at four.
+   */
+  columns?: 4 | 5;
+}) {
   return (
-    <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">{children}</div>
+    <div
+      className={cn(
+        "grid gap-4 sm:grid-cols-2",
+        columns === 5 ? "xl:grid-cols-5" : "xl:grid-cols-4",
+      )}
+    >
+      {children}
+    </div>
   );
 }
 

@@ -67,7 +67,7 @@ function TaskStripSkeleton() {
 }
 
 async function OverviewStats() {
-  const { kpis, attendance, period } = await getDashboard();
+  const { kpis, attendance, timeOff, period } = await getDashboard();
 
   // Deductions as a share of gross, which is the number a payroll manager is
   // actually asked about — "where did the rest of it go".
@@ -75,7 +75,7 @@ async function OverviewStats() {
     kpis.totalGross > 0 ? (kpis.totalDeductions / kpis.totalGross) * 100 : 0;
 
   return (
-    <StatGrid>
+    <StatGrid columns={5}>
       <StatTile
         label="Net paid"
         value={moneyShort(kpis.totalNetPaid)}
@@ -96,6 +96,17 @@ async function OverviewStats() {
         value={percent(kpis.attendanceHealth)}
         hint={`${attendance.totalRecords} records · ${hours(attendance.totalOvertimeHours)} overtime`}
         tone={kpis.attendanceHealth < 80 ? "danger" : "neutral"}
+      />
+      {/* The one part of the month the other four say nothing about: how much
+          of it people spent away, and how much is still undecided. */}
+      <StatTile
+        label="Time off"
+        value={`${timeOff.approvedDays} days`}
+        hint={
+          timeOff.pendingRequests > 0
+            ? `${timeOff.pendingRequests} awaiting a decision`
+            : "Nothing awaiting a decision"
+        }
       />
     </StatGrid>
   );
