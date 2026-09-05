@@ -575,15 +575,15 @@ function TaskCard({ task, period }: { task: DashboardTask; period: string }) {
 function Today() {
   const now = new Date();
   return (
-    <span
-      suppressHydrationWarning
-      className="ml-auto text-sm text-muted-foreground"
-    >
+    <span className="ml-auto text-sm text-primary/70">
       {/* Said outright, because the line beside it names a different month:
           the dashboard reports August while today is September, and a bare
           date there would read as part of the period rather than the clock. */}
-      <span className="text-muted-foreground/60">Today is</span>{" "}
-      <span className="font-medium text-foreground/80">
+      Today is{" "}
+      {/* The suppression has to sit on the element holding the differing text,
+          not an ancestor of it. The server's timezone and the reader's can
+          disagree about the day, and the reader's is the one that is true. */}
+      <span suppressHydrationWarning className="font-medium text-primary">
         {now.toLocaleDateString(undefined, {
           weekday: "long",
           day: "numeric",
@@ -641,7 +641,7 @@ export function TaskStrip({
           urgency, and wrapping would put the least urgent one beside the most.
           overflow-y is pinned because the spec promotes it to `auto` as soon as
           the other axis is not visible. */}
-      <div className="scrollbar-thin -mx-1 -mt-2 flex items-stretch gap-4 overflow-x-auto overflow-y-hidden px-1 pt-2 pb-1">
+      <div className="scrollbar-thin -mx-2 -mt-2 -mb-2 flex items-stretch gap-4 overflow-x-auto overflow-y-hidden px-2 pt-2 pb-4">
         {tasks.map((task) => (
           <TaskCard key={task.kind} task={task} period={period} />
         ))}
