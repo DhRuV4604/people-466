@@ -60,26 +60,32 @@ services:
       retries: 12
       start_period: 40s
 
-  web:
-    build:
-      context: .
-      dockerfile: frontend/Dockerfile
-      args:
-        # Baked in at build time because Next.js inlines NEXT_PUBLIC_* values.
-        NEXT_PUBLIC_API_URL: ${NEXT_PUBLIC_API_URL:-http://localhost:4000}
-    container_name: peoplepay360-web
-    restart: unless-stopped
-    depends_on:
-      api:
-        condition: service_healthy
-    environment:
-      NODE_ENV: production
-      PORT: 3000
-      # Server-side calls travel over the compose network, not via localhost.
-      API_URL: http://api:4000
-      NEXT_PUBLIC_API_URL: ${NEXT_PUBLIC_API_URL:-http://localhost:4000}
-    ports:
-      - '${WEB_PORT:-3000}:3000'
+  # The web client is commented out while it is being worked on: `npm run
+  # dev:web` on the host is a hot reload instead of a two-minute image rebuild
+  # for every change. `docker compose up -d` therefore starts db + api only.
+  #
+  # Uncomment the whole block to run the full stack from images again. Nothing
+  # else needs changing — the API does not depend on it.
+  # web:
+  #   build:
+  #     context: .
+  #     dockerfile: frontend/Dockerfile
+  #     args:
+  #       # Baked in at build time because Next.js inlines NEXT_PUBLIC_* values.
+  #       NEXT_PUBLIC_API_URL: ${NEXT_PUBLIC_API_URL:-http://localhost:4000}
+  #   container_name: peoplepay360-web
+  #   restart: unless-stopped
+  #   depends_on:
+  #     api:
+  #       condition: service_healthy
+  #   environment:
+  #     NODE_ENV: production
+  #     PORT: 3000
+  #     # Server-side calls travel over the compose network, not via localhost.
+  #     API_URL: http://api:4000
+  #     NEXT_PUBLIC_API_URL: ${NEXT_PUBLIC_API_URL:-http://localhost:4000}
+  #   ports:
+  #     - '${WEB_PORT:-3000}:3000'
 
 volumes:
   peoplepay_pgdata:

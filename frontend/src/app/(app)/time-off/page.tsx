@@ -16,7 +16,6 @@ import { RecordDialog } from "@/components/form";
 import {
   Tabs,
   TabsContent,
-  TabsContents,
   TabsList,
   TabsTrigger,
 } from "@/components/ui";
@@ -211,7 +210,12 @@ export default async function TimeOffPage({
           {canReadTypes ? <TabsTrigger value="types">Types</TabsTrigger> : null}
         </TabsList>
 
-        <TabsContents className="mt-4">
+        {/* A plain container rather than the animated TabsContents. That one
+            animates its height with overflow:hidden, which slices whatever sits
+            at the boundary while a switch is in flight — and permanently clips
+            any menu a row opens past its edge. No other screen animates its
+            body, so this one no longer does either. */}
+        <div className="mt-4">
           <TabsContent value="requests" className="flex flex-col gap-6">
             <FilterBar
               search={{ placeholder: "Search employee" }}
@@ -388,7 +392,7 @@ export default async function TimeOffPage({
               )}
             </TabsContent>
           ) : null}
-        </TabsContents>
+        </div>
       </Tabs>
     </>
   );
