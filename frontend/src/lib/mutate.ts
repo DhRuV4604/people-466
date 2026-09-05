@@ -175,6 +175,12 @@ export async function callAction<T = unknown>(options: {
     return {
       ok: true,
       record: result,
+      // Set the same way saveRecord does, so a caller that wants to navigate
+      // to what it just made does not have to know which helper produced it.
+      id:
+        result && typeof result === 'object' && 'id' in result
+          ? String((result as { id: unknown }).id)
+          : undefined,
       message:
         typeof options.message === "function"
           ? options.message(result)

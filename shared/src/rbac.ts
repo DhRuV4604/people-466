@@ -51,10 +51,14 @@ const employeeMatrix: RoleMatrix = {
   salaryStructures: NONE,
   salaryRules: NONE,
   dashboard: NONE,
-  // Their own file only, narrowed by the API the same way payslips are. Create
-  // is what lets them answer a request for a document; signing is guarded on
-  // the record itself, by whether it was sent to them.
-  documents: { read: true, create: true },
+  // Their own file only, narrowed by the API the same way payslips are.
+  //
+  // Read, and nothing else. Answering a request and signing are not powers an
+  // employee holds in general - they are things they may do to one document,
+  // because it was addressed to them, and the API checks that on the record.
+  // Granting `create` here would have let anyone file a document into anyone
+  // else's record, which is what those endpoints checked before this.
+  documents: READ,
   // The trail records what everyone did, so only an admin may read it.
   auditLogs: NONE,
 };

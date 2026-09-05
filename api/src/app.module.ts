@@ -16,6 +16,7 @@ import { ConfigDataModule } from './modules/config/config-data.module';
 import { DashboardModule } from './modules/dashboard/dashboard.module';
 import { NotificationsModule } from './modules/notifications/notifications.module';
 import { FilesModule } from './modules/files/files.module';
+import { AiModule } from './modules/ai/ai.module';
 import { DocumentsModule } from './modules/documents/documents.module';
 import { AuditModule } from './modules/audit/audit.module';
 import { HealthController } from './health.controller';
@@ -34,6 +35,7 @@ import { HealthController } from './health.controller';
     DashboardModule,
     NotificationsModule,
     FilesModule,
+    AiModule,
     DocumentsModule,
     AuditModule,
   ],

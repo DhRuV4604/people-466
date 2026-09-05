@@ -119,3 +119,25 @@ export class QueryDocumentsDto extends PaginationQueryDto {
   @IsIn(DOCUMENT_KINDS)
   kind?: (typeof DOCUMENT_KINDS)[number];
 }
+
+/** Ask the model to write a document from what the system already knows. */
+export class DraftDocumentDto {
+  @ApiProperty({ enum: DOCUMENT_KINDS })
+  @IsIn(DOCUMENT_KINDS)
+  kind!: (typeof DOCUMENT_KINDS)[number];
+
+  @ApiProperty()
+  @IsEntityId()
+  employeeId!: string;
+
+  @ApiPropertyOptional({ description: 'Anything HR wants said, in their words' })
+  @IsOptional()
+  @IsString()
+  @MaxLength(2000)
+  notes?: string;
+
+  @ApiPropertyOptional({ default: true })
+  @IsOptional()
+  @IsBoolean()
+  requiresSignature?: boolean;
+}

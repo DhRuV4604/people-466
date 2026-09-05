@@ -28,6 +28,7 @@ import {
   RequestDocumentDialog,
   UploadDocumentDialog,
 } from "./_components/document-dialogs";
+import { DraftDocumentDialog } from "./_components/draft-dialog";
 
 export const metadata: Metadata = {
   title: "Documents",
@@ -107,6 +108,7 @@ export default async function DocumentsPage({
           canCreate ? (
             <>
               <RequestDocumentDialog employees={refs.employees} />
+              <DraftDocumentDialog employees={refs.employees} />
               <UploadDocumentDialog employees={refs.employees} />
             </>
           ) : null

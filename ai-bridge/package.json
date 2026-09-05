@@ -1,0 +1,10 @@
+{
+  "name": "@peoplepay360/ai-bridge",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Runs the Claude CLI on the host and answers over HTTP, so the containerised API can use it.",
+  "scripts": {
+    "start": "node server.mjs"
+  }
+}

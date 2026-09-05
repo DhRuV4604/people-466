@@ -136,6 +136,58 @@ leaves a usable account, a row saying why, and the password in the response.
 `DELETE` removes the account with the employee. Where payslips exist, both are deactivated
 instead, so payroll history keeps the person it belongs to.
 
+### Documents
+
+| Method | Path | Permission |
+|---|---|---|
+| `GET` | `/documents` | `documents:read` |
+| `GET` | `/documents/:id` | `documents:read` |
+| `GET` | `/documents/:id/file` | `documents:read` |
+| `GET` | `/documents/:id/signature` | `documents:read` |
+| `POST` | `/documents` | `documents:create` |
+| `POST` | `/documents/request` | `documents:create` |
+| `POST` | `/documents/draft` | `documents:create` |
+| `POST` | `/documents/analyse` | `documents:create` |
+| `POST` | `/documents/:id/send` | `documents:update` |
+| `POST` | `/documents/:id/cancel` | `documents:update` |
+| `POST` | `/documents/:id/submit` | `documents:read` |
+| `POST` | `/documents/:id/sign` | `documents:read` |
+| `POST` | `/documents/:id/decline` | `documents:read` |
+
+Query: `q`, `employeeId`, `status`, `kind`.
+
+**An employee holds `read` and nothing else.** Submitting, signing and
+declining are guarded on the record — what makes them allowed is that the
+document was addressed to that person — so they sit under `read` rather than
+`create`. A `create` grant would apply to every document rather than one, and
+the four endpoints above it would then accept an employee filing paperwork into
+a colleague's record.
+
+An employee's list is also narrowed to their own file minus drafts, in the
+query rather than after it.
+
+`POST /documents` and `/documents/:id/submit` are `multipart/form-data`. Only a
+PDF can be sent for signature: a whole-document signature is a certificate page
+appended to the file, and nothing else can carry one.
+
+`GET /documents/:id/file` streams the signed copy where there is one, or
+`?version=original` for the file as it was sent. It goes through the API rather
+than a static mount because the permission check is the only thing between
+someone's passport scan and the internet.
+
+`/documents/:id/sign` takes `{ signatureImage, typedName }`. The image is a PNG
+data URL — drawn or typed, the browser produces the same thing either way. It
+appends a certificate page recording the signer, the time, the IP, the device
+and the SHA-256 of the document **as it was sent**, and leaves the original
+untouched. Both files are kept, so the fingerprint stays checkable.
+
+`/documents/draft` and `/documents/analyse` need the AI bridge — see
+`ai-bridge/README.md`. Draft writes a document from the employee record and
+files it as a `DRAFT`; analyse reads an uploaded PDF and returns a suggestion
+without creating anything. Both answers are treated as suggestions: a person
+reads the draft before it is sent, and confirms the suggestion before it is
+saved. Without the bridge configured they return 503 saying so.
+
 ### Contracts
 
 | Method | Path | Permission |

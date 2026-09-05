@@ -14,6 +14,12 @@ export interface AppConfig {
     /** Where uploaded files are written. A mounted volume in Compose. */
     root: string;
   };
+  ai: {
+    /** The bridge that runs the Claude CLI on the host. Empty disables AI. */
+    bridgeUrl: string;
+    bridgeToken: string;
+    timeoutMs: number;
+  };
   mail: {
     acsConnectionString: string;
     acsSenderAddress: string;
@@ -54,6 +60,15 @@ export default (): AppConfig => {
       .filter(Boolean),
     storage: {
       root: process.env.STORAGE_ROOT ?? './storage',
+    },
+    ai: {
+      /**
+       * Empty by default: an install without the bridge running should say
+       * the feature is not set up, not fail on a connection refused.
+       */
+      bridgeUrl: process.env.AI_BRIDGE_URL ?? '',
+      bridgeToken: process.env.AI_BRIDGE_TOKEN ?? '',
+      timeoutMs: Number(process.env.AI_TIMEOUT_MS ?? 150000),
     },
     mail: {
       /**

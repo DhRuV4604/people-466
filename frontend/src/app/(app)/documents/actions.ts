@@ -129,3 +129,71 @@ export async function cancelDocument(id: string): Promise<FormState<DocumentDto>
     message: "Withdrawn.",
   });
 }
+
+/** What the model suggested about an uploaded file. Nothing is created. */
+export type DocumentSuggestion = {
+  title: string;
+  kind: string;
+  personName: string | null;
+  needsSignature: boolean;
+  summary: string;
+};
+
+/**
+ * Reads an uploaded PDF and suggests how to file it.
+ *
+ * The answer only fills in the form. It is a model's reading of a document
+ * this system did not write, so a person confirms every field before anything
+ * is saved.
+ */
+export async function analyseDocument(
+  _previous: FormState,
+  formData: FormData,
+): Promise<FormState<DocumentSuggestion>> {
+  const file = formData.get("file");
+  if (!(file instanceof File) || file.size === 0) {
+    return { fieldErrors: { file: "Choose a PDF to read." } };
+  }
+
+  const body = new FormData();
+  body.set("file", file);
+
+  try {
+    const record = await apiUpload<DocumentSuggestion>(
+      "/documents/analyse",
+      body,
+    );
+    return { ok: true, record, message: "Read it." };
+  } catch (error) {
+    if (error instanceof ApiError) return { error: error.message };
+    throw error;
+  }
+}
+
+/**
+ * Has the model write a document, which lands as a draft.
+ *
+ * It goes nowhere until someone reads it: the text comes from an employee
+ * record plus free-form notes, and neither this action nor the model can tell
+ * whether what came back is correct for the person it is about.
+ */
+export async function draftDocument(
+  _previous: FormState,
+  formData: FormData,
+): Promise<FormState<DocumentDto>> {
+  const employeeId = String(formData.get("employeeId") ?? "");
+  if (!employeeId) {
+    return { fieldErrors: { employeeId: "Choose who it is for." } };
+  }
+
+  return callAction<DocumentDto>({
+    path: "/documents/draft",
+    body: {
+      kind: String(formData.get("kind") ?? "JOINING_LETTER"),
+      employeeId,
+      notes: String(formData.get("notes") ?? "") || undefined,
+      requiresSignature: formData.get("requiresSignature") === "true",
+    },
+    message: "Written. Read it through before sending it.",
+  });
+}

@@ -50,6 +50,21 @@ all. Copy `.env.example` to `.env` to change any of it.
 | `ACS_SENDER_ADDRESS` | empty | Must be a **verified** sender on the ACS domain. Azure rejects any other username outright. |
 | `SMTP_*`, `MAIL_FROM` | empty | The older fallback, used only when there is no ACS connection string. |
 
+### AI features
+
+Writing a document and reading an upload go through `ai-bridge/`, a small
+host-side process that runs the Claude CLI and answers over HTTP. The CLI is
+signed in as a person rather than holding an API key, so the container cannot
+invoke it and reaches back out to the host instead.
+
+```bash
+cd ai-bridge && AI_CLI_PATH=... AI_BRIDGE_TOKEN=... node server.mjs
+```
+
+Set `AI_BRIDGE_URL` and `AI_BRIDGE_TOKEN` in the root `.env`. Leave the URL
+empty and both features report that AI is not set up, rather than failing on a
+refused connection. `ai-bridge/README.md` has the rest.
+
 ### Email delivery
 
 The provider is chosen by what is configured rather than by a flag:

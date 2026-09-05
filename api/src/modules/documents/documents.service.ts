@@ -10,16 +10,19 @@ import type {
   DocumentSignatureDto,
   Paginated,
 } from '@peoplepay360/shared';
-import { scopeToOwnRecords } from '@peoplepay360/shared';
+import { DOCUMENT_KINDS, scopeToOwnRecords } from '@peoplepay360/shared';
 import { PrismaService } from '../../prisma/prisma.service';
 import { pageArgs, paginated } from '../../common/pagination';
 import { NotificationsService } from '../notifications/notifications.service';
 import { StorageService, type UploadedFile } from '../files/storage.service';
 import { SigningService } from '../files/signing.service';
+import { AiService } from '../ai/ai.service';
+import { LetterPdfService } from './letter-pdf.service';
 import type { AuthenticatedUser } from '../auth/auth.types';
 import type {
   CreateDocumentDto,
   DeclineDocumentDto,
+  DraftDocumentDto,
   QueryDocumentsDto,
   RequestDocumentDto,
   SignDocumentDto,
@@ -51,7 +54,9 @@ export class DocumentsService {
     private readonly prisma: PrismaService,
     private readonly storage: StorageService,
     private readonly signing: SigningService,
-    private readonly notifications: NotificationsService
+    private readonly notifications: NotificationsService,
+    private readonly ai: AiService,
+    private readonly letters: LetterPdfService
   ) {}
 
   private toDto(row: DocumentRow): DocumentDto {
@@ -218,6 +223,119 @@ export class DocumentsService {
 
     if (send) await this.tellEmployee(row, user);
     return this.toDto(row);
+  }
+
+  /**
+   * Writes a document with the model and files it as a draft.
+   *
+   * A draft rather than something sent: the text is generated from an
+   * employee record and free-form notes, and neither the model nor this
+   * service can tell whether what came back is right. Somebody has to read it
+   * before it goes to the person it is about, and DRAFT is the state that
+   * makes that a step rather than a hope.
+   */
+  async draft(dto: DraftDocumentDto, user: AuthenticatedUser): Promise<DocumentDto> {
+    const employee = await this.prisma.employee.findUnique({
+      where: { id: dto.employeeId },
+      include: {
+        department: { select: { name: true } },
+        jobPosition: { select: { name: true } },
+      },
+    });
+    if (!employee) throw new NotFoundException('Employee not found.');
+
+    const written = await this.ai.draft({
+      kind: dto.kind,
+      // Only the facts a letter needs. Bank details and date of birth are in
+      // this record too, and there is no reason to send them anywhere.
+      employee: {
+        fullName: `${employee.firstName} ${employee.lastName}`,
+        employeeCode: employee.employeeCode,
+        jobTitle: employee.jobPosition?.name ?? null,
+        department: employee.department?.name ?? null,
+        employmentType: employee.employeeType,
+        hireDate: employee.hireDate.toISOString().slice(0, 10),
+      },
+      company: { name: 'PeoplePay360' },
+      notes: dto.notes,
+    });
+
+    const title = written.title || dto.kind.replace(/_/g, ' ').toLowerCase();
+    const pdf = await this.letters.render({
+      title,
+      body: written.body,
+      companyName: 'PeoplePay360',
+      reference: employee.employeeCode,
+    });
+
+    const stored = await this.storage.saveGenerated(
+      pdf,
+      `${title.replace(/[^\w\s-]/g, '').trim() || 'document'}.pdf`,
+      'application/pdf',
+      user.userId,
+      'drafts'
+    );
+
+    const row = await this.prisma.document.create({
+      data: {
+        title,
+        kind: dto.kind,
+        employeeId: dto.employeeId,
+        fileId: stored.id,
+        createdById: user.userId,
+        requiresSignature: dto.requiresSignature ?? true,
+        status: 'DRAFT',
+      },
+      include: INCLUDE,
+    });
+
+    return this.toDto(row);
+  }
+
+  /**
+   * Reads an uploaded document and says what it appears to be.
+   *
+   * Nothing is created: the answer only fills in the form, and a person
+   * confirms it. Treating a model's reading of an untrusted PDF as a decision
+   * would let the PDF choose its own filing.
+   */
+  async analyse(
+    file: UploadedFile | undefined
+  ): Promise<{ title: string; kind: string; personName: string | null; needsSignature: boolean; summary: string }> {
+    if (!file) throw new BadRequestException('Attach the document to read.');
+    if (file.mimetype !== 'application/pdf') {
+      throw new BadRequestException('Only a PDF can be read this way.');
+    }
+
+    const { PDFParse } = await import('pdf-parse');
+    const parser = new PDFParse({ data: file.buffer });
+    let text: string;
+    try {
+      text = (await parser.getText()).text ?? '';
+    } catch {
+      throw new BadRequestException('That PDF could not be read.');
+    } finally {
+      await parser.destroy?.();
+    }
+
+    if (text.trim().length < 20) {
+      throw new BadRequestException(
+        'There is no text in that PDF to read. A scan would need to be typed up first.'
+      );
+    }
+
+    const read = await this.ai.extract(text.slice(0, 40_000));
+    return {
+      title: read.title,
+      // The model is told which values are allowed, but it is still a model:
+      // anything unexpected becomes OTHER rather than a database error.
+      kind: (DOCUMENT_KINDS as readonly string[]).includes(read.kind)
+        ? read.kind
+        : 'OTHER',
+      personName: read.personName,
+      needsSignature: read.needsSignature,
+      summary: read.summary,
+    };
   }
 
   /** Asks the employee for a file. Nothing is attached until they answer. */

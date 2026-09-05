@@ -142,6 +142,22 @@ body carrying unknown fields is rejected outright rather than stripped.
 
 A screen composes; it does not define new primitives. See [frontend.md](frontend.md).
 
+## Where AI runs
+
+Outside everything else, on purpose.
+
+`ai-bridge/` is a dependency-free Node process on the host that runs the Claude
+CLI and answers over HTTP. It is not part of the API because the CLI is signed
+in as a person: there is no key for a container to carry, and baking a personal
+session into an image would be worse than the problem it solved.
+
+Everything it is asked to do is treated as advice. Text a model wrote from an
+employee record is filed as a draft for somebody to read; a model's reading of
+an uploaded PDF fills in a form somebody confirms. Nothing it produces reaches
+an employee without a person in between, which is also the answer to prompt
+injection in an uploaded document — the fencing in the bridge reduces the odds,
+the human step is what makes the failure survivable.
+
 ## Pagination
 
 Every list endpoint takes `page` and `pageSize` and returns the same envelope:

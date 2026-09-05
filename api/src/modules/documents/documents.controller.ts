@@ -17,6 +17,7 @@ import { DocumentsService } from './documents.service';
 import {
   CreateDocumentDto,
   DeclineDocumentDto,
+  DraftDocumentDto,
   QueryDocumentsDto,
   RequestDocumentDto,
   SignDocumentDto,
@@ -120,6 +121,29 @@ export class DocumentsController {
     return this.documents.create(dto, file, user);
   }
 
+  /**
+   * Writes one with the model. Lands as a draft: see the service for why.
+   */
+  @Post('draft')
+  @RequirePermission('documents', 'create')
+  @ApiOperation({ summary: 'Write a document with AI and file it as a draft' })
+  draft(@Body() dto: DraftDocumentDto, @CurrentUser() user: AuthenticatedUser) {
+    return this.documents.draft(dto, user);
+  }
+
+  /**
+   * Reads an upload and suggests how to file it. Creates nothing: the answer
+   * fills in the form and a person confirms it.
+   */
+  @Post('analyse')
+  @RequirePermission('documents', 'create')
+  @ApiConsumes('multipart/form-data')
+  @ApiOperation({ summary: 'Read a PDF and suggest a title, type and signer' })
+  @UseInterceptors(FileInterceptor('file', { limits: { fileSize: 20 * 1024 * 1024 } }))
+  analyse(@UploadedFile() file: StoredUpload | undefined) {
+    return this.documents.analyse(file);
+  }
+
   @Post('request')
   @RequirePermission('documents', 'create')
   @ApiOperation({ summary: 'Ask an employee to supply a document' })
@@ -128,12 +152,16 @@ export class DocumentsController {
   }
 
   /**
-   * Answering a request, and signing, are guarded by who the document was sent
-   * to rather than by a permission. `create` is the weakest grant an employee
-   * holds, and the record check is what actually decides.
+   * Answering a request, signing and declining are the three things an
+   * employee may do, and each is guarded by the record rather than the matrix:
+   * what makes them allowed is that this document was sent to this person.
+   *
+   * `read` is deliberately the grant they carry. A create grant would apply to
+   * every document rather than one, and the endpoints above would then accept
+   * an employee filing paperwork into a colleague's record.
    */
   @Post(':id/submit')
-  @RequirePermission('documents', 'create')
+  @RequirePermission('documents', 'read')
   @ApiConsumes('multipart/form-data')
   @UseInterceptors(FileInterceptor('file', { limits: { fileSize: 20 * 1024 * 1024 } }))
   submit(
@@ -145,7 +173,7 @@ export class DocumentsController {
   }
 
   @Post(':id/sign')
-  @RequirePermission('documents', 'create')
+  @RequirePermission('documents', 'read')
   @ApiOperation({ summary: 'Sign a document addressed to you' })
   sign(
     @Param('id', ParseEntityIdPipe) id: string,
@@ -160,7 +188,7 @@ export class DocumentsController {
   }
 
   @Post(':id/decline')
-  @RequirePermission('documents', 'create')
+  @RequirePermission('documents', 'read')
   decline(
     @Param('id', ParseEntityIdPipe) id: string,
     @Body() dto: DeclineDocumentDto,

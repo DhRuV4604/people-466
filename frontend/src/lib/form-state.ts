@@ -39,4 +39,9 @@ export type FormState<T = unknown> = {
   };
 };
 
-export const FORM_IDLE: FormState = {};
+/**
+ * Typed at `never` so it is a valid starting value for any `FormState<T>`:
+ * an idle state carries no record, and saying so lets one constant seed every
+ * form rather than each screen declaring its own empty object.
+ */
+export const FORM_IDLE: FormState<never> = {};

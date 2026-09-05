@@ -1,7 +1,7 @@
 "use client";
 
 import * as React from "react";
-import { FileUp, Paperclip, Send, Plus } from "lucide-react";
+import { FileUp, Paperclip, Send, Plus, Sparkles } from "lucide-react";
 import { DOCUMENT_KINDS, type DocumentKind } from "@peoplepay360/shared";
 
 import {
@@ -26,7 +26,7 @@ import { DOCUMENT_KIND_LABELS, fileSize } from "@/lib/format";
 import type { FieldOption } from "@/lib/fields";
 import { FORM_IDLE, type FormState } from "@/lib/form-state";
 
-import { requestDocument, uploadDocument } from "../actions";
+import { analyseDocument, requestDocument, uploadDocument } from "../actions";
 
 const KIND_OPTIONS = DOCUMENT_KINDS.map((kind) => ({
   value: kind,
@@ -156,7 +156,38 @@ export function UploadDocumentDialog({
   const [pending, startTransition] = React.useTransition();
   const [forSignature, setForSignature] = React.useState(false);
   const [isPdf, setIsPdf] = React.useState(true);
+  const [file, setFile] = React.useState<File | null>(null);
+  const [title, setTitle] = React.useState("");
+  const [kind, setKind] = React.useState("JOINING_LETTER");
+  const [summary, setSummary] = React.useState("");
+  const [reading, setReading] = React.useState(false);
   const { toast } = useToast();
+
+  /**
+   * Has the model read the chosen file and fill the form in.
+   *
+   * It fills the fields rather than submitting them: this is a reading of a
+   * document nobody here wrote, and the person uploading it is the one who
+   * knows whether it is right.
+   */
+  const readFile = () => {
+    if (!file) return;
+    setReading(true);
+    startTransition(async () => {
+      const body = new FormData();
+      body.set("file", file);
+      const next = await analyseDocument(FORM_IDLE, body);
+      setReading(false);
+      if (!next.ok || !next.record) {
+        toast(next.error ?? "Could not read that file.", "error");
+        return;
+      }
+      setTitle(next.record.title);
+      setKind(next.record.kind);
+      setForSignature(next.record.needsSignature);
+      setSummary(next.record.summary);
+    });
+  };
 
   // The result is acted on where it arrives rather than watched for in an
   // effect: closing the dialog is a consequence of the submit, not of the
@@ -202,16 +233,41 @@ export function UploadDocumentDialog({
           <FilePicker
             name="file"
             error={state.fieldErrors?.file}
-            onPicked={(file) =>
-              setIsPdf(!file || file.type === "application/pdf")
-            }
+            onPicked={(picked) => {
+              setFile(picked);
+              setIsPdf(!picked || picked.type === "application/pdf");
+              setSummary("");
+            }}
           />
+
+          {file && isPdf ? (
+            <div className="-mt-2 flex flex-wrap items-center gap-3">
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                startIcon={<Sparkles />}
+                loading={reading}
+                loadingText="Reading"
+                onClick={readFile}
+              >
+                Read it and fill this in
+              </Button>
+              {summary ? (
+                <p className="min-w-0 flex-1 text-xs text-muted-foreground">
+                  {summary}
+                </p>
+              ) : null}
+            </div>
+          ) : null}
 
           <Field>
             <FieldLabel htmlFor="title">Name</FieldLabel>
             <Input
               id="title"
               name="title"
+              value={title}
+              onChange={(event) => setTitle(event.target.value)}
               placeholder="Joining letter"
               disabled={pending}
             />
@@ -219,14 +275,18 @@ export function UploadDocumentDialog({
           </Field>
 
           <div className="grid gap-5 sm:grid-cols-2">
-            <SelectField
-              id="kind"
-              name="kind"
-              label="Type"
-              options={KIND_OPTIONS}
-              defaultValue="JOINING_LETTER"
-              disabled={pending}
-            />
+            <Field>
+              <FieldLabel htmlFor="kind">Type</FieldLabel>
+              <input type="hidden" name="kind" value={kind} />
+              <Select
+                id="kind"
+                size="md"
+                options={KIND_OPTIONS}
+                value={kind}
+                onValueChange={setKind}
+                disabled={pending}
+              />
+            </Field>
 
             {employeeId ? (
               <input type="hidden" name="employeeId" value={employeeId} />

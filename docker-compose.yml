@@ -48,6 +48,10 @@ services:
       # Uploaded files. A named volume, so a rebuild does not take the
       # signed documents with it.
       STORAGE_ROOT: /data/storage
+      # The AI bridge runs on the host, because the Claude CLI is signed in
+      # there. host.docker.internal is how the container reaches back out.
+      AI_BRIDGE_URL: ${AI_BRIDGE_URL:-}
+      AI_BRIDGE_TOKEN: ${AI_BRIDGE_TOKEN:-}
     volumes:
       - peoplepay_files:/data/storage
     ports:
