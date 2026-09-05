@@ -808,7 +808,17 @@ export class TimeOffService {
   }
 }
 
-/** Date only: a notification line has no use for the time. */
+/**
+ * Date only, and in words: a notification line has no use for the time, and
+ * nobody reads "2026-09-06" as a date. Pinned to UTC because leave dates are
+ * stored as midnight UTC, which a local-time render would show as the day
+ * before anywhere west of it.
+ */
 function day(date: Date): string {
-  return date.toISOString().slice(0, 10);
+  return date.toLocaleDateString('en-GB', {
+    day: '2-digit',
+    month: 'short',
+    year: 'numeric',
+    timeZone: 'UTC',
+  });
 }

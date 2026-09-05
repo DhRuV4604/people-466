@@ -41,8 +41,9 @@ const STEPS: [Intl.RelativeTimeFormatUnit, number][] = [
 function relative(iso: string, now: number): string {
   const seconds = (new Date(iso).getTime() - now) / 1000;
   if (Number.isNaN(seconds)) return "";
-  // "43 seconds ago" is noise at this size, and it would be wrong a second later.
-  if (Math.abs(seconds) < 45) return "just now";
+  // "43 seconds ago" is noise at this size, and it would be wrong a second
+  // later. Under a minute is "just now"; after that the units take over.
+  if (Math.abs(seconds) < 60) return "just now";
 
   let value = seconds;
   for (const [unit, span] of STEPS) {
@@ -155,8 +156,13 @@ export function NotificationBell({
       report(() => markNotificationRead(item.id));
     }
 
-    setOpen(false);
-    if (item.href) router.push(item.href);
+    // Only close where there is somewhere to go. A notification with no link
+    // has just been marked read in place, and shutting the list on the user
+    // would hide that it happened.
+    if (item.href) {
+      setOpen(false);
+      router.push(item.href);
+    }
   };
 
   const markAll = () => {
@@ -177,6 +183,8 @@ export function NotificationBell({
         <Popover open={open} onOpenChange={setOpen}>
           <PopoverTrigger asChild>
             <IconButton
+              // Sized to sit beside the theme toggle rather than tower over it.
+              size="sm"
               icon={<Bell />}
               // The count is painted beside the button rather than in it, so
               // the accessible name is the only place a screen reader can hear it.
@@ -255,7 +263,10 @@ export function NotificationBell({
 
                       <span className="pl-3.5 text-xs text-muted-foreground">
                         {item.actorName ? `${item.actorName} · ` : ""}
-                        <time dateTime={item.createdAt}>
+                        <time
+                          dateTime={item.createdAt}
+                          title={formatDate(item.createdAt)}
+                        >
                           {now === null
                             ? formatDate(item.createdAt)
                             : relative(item.createdAt, now)}
@@ -277,6 +288,12 @@ export function NotificationBell({
             {unread > 99 ? "99+" : unread}
           </span>
         ) : null}
+
+        {/* The badge changes on its own when something arrives, and a silent
+            change is invisible to a screen reader. This says it out loud. */}
+        <span role="status" aria-live="polite" className="sr-only">
+          {unread > 0 ? `${unread} unread notifications` : ""}
+        </span>
       </div>
     </div>
   );

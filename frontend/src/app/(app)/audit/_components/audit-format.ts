@@ -1,6 +1,7 @@
 import type { AuditAction } from "@peoplepay360/shared";
 
 import { formatDate, formatTime, money } from "@/lib/format";
+import { statusLabel } from "@/lib/status";
 
 /**
  * The words and colours the trail is read in.
@@ -66,15 +67,21 @@ export function fieldLabel(field: string): string {
 const MONEY_FIELD = /wage|amount|salary|gross|net|total|basic|balance|cost|price/i;
 const NUMERIC = /^-?\d+(?:\.\d+)?$/;
 const ISO = /^\d{4}-\d{2}-\d{2}(?:T\d{2}:\d{2}:\d{2}(?:\.\d+)?Z?)?$/;
+/** Letters and underscores only, so an account number or a code is not
+ *  mistaken for one of the API's enum constants. */
+const CONSTANT = /^[A-Z][A-Z_]{2,}$/;
 
 const NUMBER = new Intl.NumberFormat("en-GB", { maximumFractionDigits: 2 });
+
+/** What an absent value reads as, wherever one turns up. */
+export const NOTHING = "—";
 
 /**
  * A stored value as a person reads it, decided by what the field holds. A diff
  * showing `true`, `null` or `2026-03-01T00:00:00.000Z` is a diff nobody checks.
  */
 export function formatValue(field: string, value: unknown): string {
-  if (value === null || value === undefined || value === "") return "—";
+  if (value === null || value === undefined || value === "") return NOTHING;
   if (typeof value === "boolean") return value ? "Yes" : "No";
 
   const isMoney = MONEY_FIELD.test(field);
@@ -87,6 +94,10 @@ export function formatValue(field: string, value: unknown): string {
     // A Decimal column crosses the wire as a string, so the money test has to
     // run before the value is taken for text.
     if (isMoney && NUMERIC.test(value)) return money(Number(value));
+
+    // A status change is the most common edit there is, and it is worth
+    // nothing if it reads "TO_APPROVE" instead of "To approve".
+    if (CONSTANT.test(value)) return statusLabel(value);
 
     if (ISO.test(value)) {
       const time = formatTime(value);
@@ -101,7 +112,7 @@ export function formatValue(field: string, value: unknown): string {
   if (Array.isArray(value)) {
     return value.length
       ? value.map((item) => formatValue(field, item)).join(", ")
-      : "—";
+      : NOTHING;
   }
 
   return JSON.stringify(value);

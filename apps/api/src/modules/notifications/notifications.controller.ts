@@ -53,8 +53,25 @@ export class NotificationsController {
     });
     response.flushHeaders();
 
+    let open = true;
+
+    /**
+     * A heartbeat can still be in flight when the browser goes away, and a write
+     * that lands after the socket is gone emits an `error` on the response -
+     * unhandled, that would take the process with it. Once anything here fails
+     * the stream is finished; the teardown below is what detaches it.
+     */
+    const write = (chunk: string): void => {
+      if (!open || response.writableEnded || response.destroyed) return;
+      try {
+        response.write(chunk);
+      } catch {
+        open = false;
+      }
+    };
+
     const send = (event: string, data: unknown): void => {
-      response.write(`event: ${event}\ndata: ${JSON.stringify(data)}\n\n`);
+      write(`event: ${event}\ndata: ${JSON.stringify(data)}\n\n`);
     };
 
     // Tells the client the stream is open rather than merely pending.
@@ -64,14 +81,19 @@ export class NotificationsController {
 
     // A comment line: it keeps the connection warm without the client seeing an
     // event, because an idle proxy closes a response that says nothing.
-    const heartbeat = setInterval(() => response.write(': ping\n\n'), HEARTBEAT_MS);
+    const heartbeat = setInterval(() => write(': ping\n\n'), HEARTBEAT_MS);
 
     // Without this, every reconnect would leave a listener and a timer behind.
     const close = (): void => {
+      open = false;
       clearInterval(heartbeat);
       unsubscribe();
     };
+
     request.on('close', close);
+    // Also on error: a dropped connection is not always a clean close, and a
+    // response with no `error` listener of its own throws when one is emitted.
+    response.on('error', close);
   }
 
   @Post(':id/read')

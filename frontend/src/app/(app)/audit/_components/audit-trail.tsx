@@ -16,6 +16,7 @@ import { cn } from "@/lib/utils";
 
 import {
   ACTION_TONE,
+  NOTHING,
   entityLabel,
   fieldLabel,
   formatValue,
@@ -73,7 +74,7 @@ export function AuditTrail({ rows }: { rows: AuditRow[] }) {
                     onClick={() => toggle(row.id)}
                     aria-expanded={isOpen}
                     aria-controls={`entry-${row.id}`}
-                    className="flex w-full items-center gap-3 px-4 py-3 text-left text-sm transition-colors outline-none hover:bg-muted/40 focus-visible:bg-muted/40"
+                    className="flex w-full flex-wrap items-center gap-x-3 gap-y-1 px-4 py-3 text-left text-sm transition-colors outline-none hover:bg-muted/40 focus-visible:bg-muted/40"
                   >
                     <ChevronRight
                       className={cn(
@@ -95,12 +96,17 @@ export function AuditTrail({ rows }: { rows: AuditRow[] }) {
                     <StatusBadge
                       value={AUDIT_ACTION_LABELS[row.action]}
                       className={cn(
-                        "w-28 justify-center",
+                        "justify-center sm:w-28",
                         ACTION_TONE[row.action],
                       )}
                     />
 
-                    <span className="min-w-0 flex-1 truncate">
+                    {/* A line break on a narrow screen, so the record keeps a
+                        line of its own rather than being squeezed out of the
+                        row it is the point of. */}
+                    <span className="basis-full sm:hidden" aria-hidden />
+
+                    <span className="min-w-0 flex-1 truncate pl-7 sm:pl-0">
                       <span className="text-muted-foreground">
                         {entityLabel(row.entity)}
                       </span>
@@ -149,7 +155,7 @@ function Detail({ row }: { row: AuditRow }) {
         <Cards>
           {changes.map((change) => (
             <Card key={change.field} label={fieldLabel(change.field)}>
-              <Was>{formatValue(change.field, change.from)}</Was>
+              <Was value={formatValue(change.field, change.from)} />
               <MoveRight className="size-3.5 shrink-0 text-muted-foreground/60" />
               <span className="font-medium break-words">
                 {formatValue(change.field, change.to)}
@@ -163,9 +169,12 @@ function Detail({ row }: { row: AuditRow }) {
             The record as it was when it was deleted.
           </p>
           <Cards>
+            {/* Not struck through: the caption already says the record is
+                gone, and six struck lines are harder to read than they are
+                expressive. */}
             {snapshot.map(([field, value]) => (
               <Card key={field} label={fieldLabel(field)}>
-                <Was>{formatValue(field, value)}</Was>
+                <span className="break-words">{formatValue(field, value)}</span>
               </Card>
             ))}
           </Cards>
@@ -210,11 +219,17 @@ function Card({
   );
 }
 
-/** The old value, struck through so it cannot be mistaken for the new one. */
-function Was({ children }: { children: React.ReactNode }) {
+/** The old value, struck through so it cannot be mistaken for the new one.
+ *  A field that was empty before is left alone: there is nothing to strike. */
+function Was({ value }: { value: string }) {
   return (
-    <span className="break-words text-muted-foreground line-through decoration-muted-foreground/60">
-      {children}
+    <span
+      className={cn(
+        "break-words text-muted-foreground",
+        value !== NOTHING && "line-through decoration-muted-foreground/60",
+      )}
+    >
+      {value}
     </span>
   );
 }

@@ -15,6 +15,7 @@ import { PayrollModule } from './modules/payroll/payroll.module';
 import { ConfigDataModule } from './modules/config/config-data.module';
 import { DashboardModule } from './modules/dashboard/dashboard.module';
 import { NotificationsModule } from './modules/notifications/notifications.module';
+import { AuditModule } from './modules/audit/audit.module';
 import { HealthController } from './health.controller';
 
 @Module({
@@ -30,6 +31,7 @@ import { HealthController } from './health.controller';
     ConfigDataModule,
     DashboardModule,
     NotificationsModule,
+    AuditModule,
   ],
   controllers: [HealthController],
   providers: [

@@ -402,13 +402,15 @@ export class PayrunsService {
 
     const result = await this.mail.sendPayrunPayslips(id);
 
-    // The one notification that does go to its own actor: a bulk send renders and
-    // mails every payslip, so the counts are news even to the person who asked.
-    await this.notifications.notify([user.userId], {
+    // Not the sender: the counts are in the response they are already waiting on.
+    // It is the rest of payroll who cannot see a bulk send any other way.
+    await this.notifications.notifyPermission('payslips', 'read', {
       type: 'payslip.sent',
       title: `Payslips sent for "${payrun.name}"`,
       body: `${result.sent} sent, ${result.failed} failed.`,
       href: `/payruns/${id}`,
+      actorName: user.name,
+      actorId: user.userId,
     });
 
     return result;

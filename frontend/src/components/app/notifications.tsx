@@ -20,6 +20,8 @@ export async function Notifications() {
 
   try {
     summary = await apiFetch<NotificationSummaryDto>("/notifications", {
+      // Matches the cap the bell keeps in the browser, so a live arrival
+      // pushing the oldest row out leaves the list the length it started at.
       query: { limit: 12 },
     });
   } catch {

@@ -58,8 +58,8 @@ export class NotificationsService {
     const recipients = [...new Set(userIds)].filter((id) => id && id !== payload.actorId);
     if (recipients.length === 0) return 0;
 
-    try {
-      const rows = await this.prisma.notification.createManyAndReturn({
+    const rows = await this.attempt(payload.type, () =>
+      this.prisma.notification.createManyAndReturn({
         data: recipients.map((userId) => ({
           userId,
           type: payload.type,
@@ -68,27 +68,34 @@ export class NotificationsService {
           href: payload.href ?? null,
           actorName: payload.actorName ?? null,
         })),
-      });
+      })
+    );
+    if (!rows) return 0;
 
-      for (const row of rows) this.bus.emit(channelFor(row.userId), toDto(row));
-      return rows.length;
-    } catch (error) {
-      // A notification is a side effect of the real action. Failing to deliver
-      // one must never fail the leave request or pay run that raised it.
-      const reason = error instanceof Error ? error.message : String(error);
-      this.logger.warn(`Could not raise "${payload.type}": ${reason}`);
-      return 0;
+    // Pushed outside the guard above: the rows are committed either way, and one
+    // subscriber throwing on its way out must not stop the rest being told.
+    for (const row of rows) {
+      try {
+        this.bus.emit(channelFor(row.userId), toDto(row));
+      } catch (error) {
+        this.warn(payload.type, error);
+      }
     }
+    return rows.length;
   }
 
   /** Fans out to every active account holding one of these roles. */
   async notifyRole(roles: Role[], payload: NotifyPayload): Promise<number> {
     if (roles.length === 0) return 0;
 
-    const users = await this.prisma.user.findMany({
-      where: { active: true, role: { in: roles } },
-      select: { id: true },
-    });
+    const users = await this.attempt(payload.type, () =>
+      this.prisma.user.findMany({
+        where: { active: true, role: { in: roles } },
+        select: { id: true },
+      })
+    );
+    if (!users) return 0;
+
     return this.notify(
       users.map((u) => u.id),
       payload
@@ -124,14 +131,38 @@ export class NotificationsService {
     if (ids.length === 0) return 0;
 
     // An employee without a user account has nowhere to be notified.
-    const employees = await this.prisma.employee.findMany({
-      where: { id: { in: ids }, userId: { not: null }, user: { active: true } },
-      select: { userId: true },
-    });
+    const employees = await this.attempt(payload.type, () =>
+      this.prisma.employee.findMany({
+        where: { id: { in: ids }, userId: { not: null }, user: { active: true } },
+        select: { userId: true },
+      })
+    );
+    if (!employees) return 0;
+
     return this.notify(
       employees.map((e) => e.userId as string),
       payload
     );
+  }
+
+  /**
+   * Runs one step of raising a notification. A notification is a side effect of
+   * the real action, so a database that will not answer costs the notification
+   * and never the leave request or pay run that raised it - which means every
+   * query on this path, not only the write, has to be caught.
+   */
+  private async attempt<T>(type: string, run: () => Promise<T>): Promise<T | null> {
+    try {
+      return await run();
+    } catch (error) {
+      this.warn(type, error);
+      return null;
+    }
+  }
+
+  private warn(type: string, error: unknown): void {
+    const reason = error instanceof Error ? error.message : String(error);
+    this.logger.warn(`Could not raise "${type}": ${reason}`);
   }
 
   // ---------------------------------------------------------------- Reading
