@@ -1,0 +1,474 @@
+// PeoplePay360 - HR & Payroll data model
+// Design notes:
+//  - Employee is the central hub; Contract/Attendance/TimeOff/Payslip all hang off it.
+//  - Contracts are period-scoped (dateStart/dateEnd) so payroll can resolve exactly one
+//    applicable contract per payroll period instead of relying on a single "current" flag.
+//  - Leave balances are derived from Allocation minus approved Requests, never stored raw.
+//  - Salary rules carry a sequence so later rules can reference earlier subtotals.
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+// ---------------------------------------------------------------- Access control
+
+model User {
+  id           String    @id @default(cuid())
+  email        String    @unique
+  name         String
+  passwordHash String
+  role         String // EMPLOYEE | HR_MANAGER | HR_PAYROLL_USER | HR_PAYROLL_MANAGER | ADMIN
+  active       Boolean   @default(true)
+  employee     Employee?
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
+}
+
+// ---------------------------------------------------------------- HR master data
+
+model Department {
+  id        String     @id @default(cuid())
+  name      String     @unique
+  code      String?
+  managerId String?
+  employees Employee[]
+  createdAt DateTime   @default(now())
+}
+
+model JobPosition {
+  id        String     @id @default(cuid())
+  name      String     @unique
+  employees Employee[]
+  contracts Contract[]
+  createdAt DateTime   @default(now())
+}
+
+model Employee {
+  id           String  @id @default(cuid())
+  employeeCode String  @unique
+  firstName    String
+  lastName     String
+  workEmail    String  @unique
+  workPhone    String?
+  // Personal / payroll-relevant identity
+  dateOfBirth  DateTime?
+  gender       String?
+  address      String?
+  // Bank details - absence of these raises a payroll warning before validation
+  bankName          String?
+  bankAccountNumber String?
+
+  employeeType String  @default("FULL_TIME") // FULL_TIME | PART_TIME | CONTRACT | INTERN
+  status       String  @default("ACTIVE") // ACTIVE | ON_LEAVE | INACTIVE
+  hireDate     DateTime
+  exitDate     DateTime?
+
+  departmentId String?
+  department   Department? @relation(fields: [departmentId], references: [id])
+
+  jobPositionId String?
+  jobPosition   JobPosition? @relation(fields: [jobPositionId], references: [id])
+
+  managerId String?
+  manager   Employee?  @relation("EmployeeManager", fields: [managerId], references: [id])
+  reports   Employee[] @relation("EmployeeManager")
+
+  workingScheduleId String?
+  workingSchedule   WorkingSchedule? @relation(fields: [workingScheduleId], references: [id])
+
+  userId String? @unique
+  user   User?   @relation(fields: [userId], references: [id])
+
+  contracts   Contract[]
+  attendances Attendance[]
+  leaveRequests    LeaveRequest[]
+  leaveAllocations LeaveAllocation[]
+  payslips    Payslip[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([departmentId])
+  @@index([status])
+}
+
+// ---------------------------------------------------------------- Working schedules
+
+model WorkingSchedule {
+  id           String  @id @default(cuid())
+  name         String  @unique
+  scheduleType String  @default("FULL_TIME") // FULL_TIME | PART_TIME | FLEXIBLE
+  timezone     String  @default("UTC")
+  // hoursPerWeek is computed from lines on write; never entered by hand.
+  hoursPerWeek Float   @default(0)
+  active       Boolean @default(true)
+
+  lines     WorkingScheduleLine[]
+  employees Employee[]
+  contracts Contract[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+model WorkingScheduleLine {
+  id         String @id @default(cuid())
+  scheduleId String
+  schedule   WorkingSchedule @relation(fields: [scheduleId], references: [id], onDelete: Cascade)
+  dayOfWeek  Int // 0=Sunday .. 6=Saturday
+  startTime  String // "09:00"
+  endTime    String // "18:00"
+  breakHours Float  @default(0)
+
+  @@index([scheduleId])
+}
+
+// ---------------------------------------------------------------- Contracts
+
+model Contract {
+  id     String @id @default(cuid())
+  name   String
+  employeeId String
+  employee   Employee @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+
+  dateStart DateTime
+  dateEnd   DateTime? // null = open-ended
+  // DRAFT | RUNNING | EXPIRED | CANCELLED. Only RUNNING contracts overlapping the
+  // payroll period are eligible for payslip computation.
+  status    String   @default("DRAFT")
+
+  wage         Float // monthly gross basic
+  contractType String  @default("PERMANENT") // PERMANENT | FIXED_TERM | INTERNSHIP | FREELANCE
+
+  jobPositionId String?
+  jobPosition   JobPosition? @relation(fields: [jobPositionId], references: [id])
+
+  workingScheduleId String?
+  workingSchedule   WorkingSchedule? @relation(fields: [workingScheduleId], references: [id])
+
+  salaryStructureId String?
+  salaryStructure   SalaryStructure? @relation(fields: [salaryStructureId], references: [id])
+
+  notes    String?
+  payslips Payslip[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([employeeId])
+  @@index([dateStart, dateEnd])
+}
+
+// ---------------------------------------------------------------- Attendance
+
+model Attendance {
+  id         String   @id @default(cuid())
+  employeeId String
+  employee   Employee @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+
+  checkIn  DateTime
+  checkOut DateTime?
+
+  // Derived on write from checkIn/checkOut minus scheduled break.
+  workedHours   Float  @default(0)
+  overtimeHours Float  @default(0)
+
+  // PRESENT | LATE | ABSENT | MISSING_CHECKOUT | HALF_DAY
+  status String @default("PRESENT")
+
+  // Correction audit trail - manual edits are restricted to authorised users.
+  manuallyEdited Boolean   @default(false)
+  editedById     String?
+  editedAt       DateTime?
+  editReason     String?
+  notes          String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([employeeId, checkIn])
+  @@index([status])
+}
+
+// ---------------------------------------------------------------- Time Off
+
+model TimeOffType {
+  id   String @id @default(cuid())
+  name String @unique
+  code String @unique
+
+  unit String @default("DAY") // DAY | HOUR
+
+  // When true, requests must draw from an approved allocation and are blocked
+  // once the remaining balance is exhausted.
+  requiresAllocation Boolean @default(true)
+  requiresApproval   Boolean @default(true)
+
+  // Whether approved leave of this type is paid through payroll.
+  paid       Boolean @default(true)
+  colorHex   String  @default("#2563eb")
+  maxDaysPerRequest Int?
+  active     Boolean @default(true)
+
+  requests    LeaveRequest[]
+  allocations LeaveAllocation[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+model LeaveAllocation {
+  id         String   @id @default(cuid())
+  employeeId String
+  employee   Employee @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+
+  typeId String
+  type   TimeOffType @relation(fields: [typeId], references: [id])
+
+  // Allocated quantity in the type's unit.
+  quantity Float
+
+  validFrom DateTime
+  validTo   DateTime?
+
+  // DRAFT | APPROVED | REFUSED. Only APPROVED allocations contribute to balance.
+  status String @default("DRAFT")
+
+  notes      String?
+  approvedBy String?
+  approvedAt DateTime?
+
+  requests LeaveRequest[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([employeeId, typeId])
+}
+
+model LeaveRequest {
+  id         String   @id @default(cuid())
+  employeeId String
+  employee   Employee @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+
+  typeId String
+  type   TimeOffType @relation(fields: [typeId], references: [id])
+
+  // Set when the request consumes a specific allocation, making the link explicit
+  // and auditable rather than inferring it later.
+  allocationId String?
+  allocation   LeaveAllocation? @relation(fields: [allocationId], references: [id])
+
+  dateFrom DateTime
+  dateTo   DateTime
+  // Working-day (or hour) count, excluding non-scheduled days.
+  duration Float
+
+  // DRAFT | TO_APPROVE | APPROVED | REFUSED | CANCELLED
+  status String @default("TO_APPROVE")
+
+  reason      String?
+  approvedBy  String?
+  approvedAt  DateTime?
+  refusedBy   String?
+  refusedAt   DateTime?
+  refuseReason String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([employeeId, dateFrom])
+  @@index([status])
+}
+
+// ---------------------------------------------------------------- Salary config
+
+model SalaryStructure {
+  id          String  @id @default(cuid())
+  name        String  @unique
+  code        String  @unique
+  description String?
+  active      Boolean @default(true)
+
+  rules     SalaryRule[]
+  contracts Contract[]
+  payruns   Payrun[]
+  payslips  Payslip[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+model SalaryRule {
+  id   String @id @default(cuid())
+  name String
+  code String // referenced inside formulas, e.g. BASIC, HRA
+
+  structureId String
+  structure   SalaryStructure @relation(fields: [structureId], references: [id], onDelete: Cascade)
+
+  // BASIC | ALLOWANCE | GROSS | DEDUCTION | CONTRIBUTION | NET
+  category String
+
+  // Lower sequence computes first, so later rules can reference earlier results.
+  sequence Int @default(100)
+
+  // FIXED | PERCENTAGE | FORMULA
+  computeType String @default("FIXED")
+
+  amountFixed      Float?
+  amountPercentage Float?
+  // Code of the rule the percentage applies to, e.g. "BASIC".
+  percentageBase   String?
+  // JS-like expression evaluated in a sandbox with prior rule codes in scope.
+  formula          String?
+
+  // Optional guard expression; rule is skipped when it evaluates false.
+  condition String?
+
+  appearsOnPayslip Boolean @default(true)
+  active           Boolean @default(true)
+  note             String?
+
+  lines PayslipLine[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([structureId, code])
+  @@index([structureId, sequence])
+}
+
+// ---------------------------------------------------------------- Payroll
+
+model Payrun {
+  id   String @id @default(cuid())
+  name String
+
+  structureId String
+  structure   SalaryStructure @relation(fields: [structureId], references: [id])
+
+  periodStart DateTime
+  periodEnd   DateTime
+
+  // DRAFT | COMPUTED | VALIDATED | PAID | CANCELLED
+  status String @default("DRAFT")
+
+  departmentFilter String?
+  employeeTypeFilter String?
+
+  computedAt  DateTime?
+  validatedAt DateTime?
+  paidAt      DateTime?
+  paidBy      String?
+
+  payslips Payslip[]
+  emails   EmailLog[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([periodStart, periodEnd])
+  @@index([status])
+}
+
+model Payslip {
+  id     String @id @default(cuid())
+  number String @unique
+
+  employeeId String
+  employee   Employee @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+
+  payrunId String?
+  payrun   Payrun? @relation(fields: [payrunId], references: [id], onDelete: Cascade)
+
+  // Snapshot of the contract that applied to this period - kept even if the
+  // contract later changes, so historical payslips stay reproducible.
+  contractId String?
+  contract   Contract? @relation(fields: [contractId], references: [id])
+
+  structureId String
+  structure   SalaryStructure @relation(fields: [structureId], references: [id])
+
+  periodStart DateTime
+  periodEnd   DateTime
+
+  // DRAFT | COMPUTED | VALIDATED | PAID | CANCELLED
+  status String @default("DRAFT")
+
+  workedDays  Float @default(0)
+  workedHours Float @default(0)
+  leaveDays   Float @default(0)
+  overtimeHours Float @default(0)
+
+  basicWage Float @default(0)
+  grossPay  Float @default(0)
+  totalDeductions Float @default(0)
+  netPay    Float @default(0)
+
+  // JSON array of warning strings surfaced before validation.
+  warnings String @default("[]")
+
+  lines PayslipLine[]
+  emails EmailLog[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([employeeId, periodStart])
+  @@index([payrunId])
+  @@index([status])
+}
+
+model PayslipLine {
+  id        String  @id @default(cuid())
+  payslipId String
+  payslip   Payslip @relation(fields: [payslipId], references: [id], onDelete: Cascade)
+
+  ruleId String?
+  rule   SalaryRule? @relation(fields: [ruleId], references: [id])
+
+  // Denormalised so the payslip renders identically even if the rule is edited later.
+  code     String
+  name     String
+  category String
+  sequence Int    @default(100)
+
+  quantity Float @default(1)
+  rate     Float @default(100)
+  amount   Float @default(0)
+
+  @@index([payslipId, sequence])
+}
+
+// ---------------------------------------------------------------- Delivery
+
+model EmailLog {
+  id String @id @default(cuid())
+
+  payslipId String?
+  payslip   Payslip? @relation(fields: [payslipId], references: [id], onDelete: SetNull)
+
+  payrunId String?
+  payrun   Payrun? @relation(fields: [payrunId], references: [id], onDelete: SetNull)
+
+  toEmail  String
+  toName   String?
+  subject  String
+  body     String
+  attachmentName String?
+
+  // QUEUED | SENT | FAILED
+  status String @default("SENT")
+  error  String?
+
+  sentAt    DateTime  @default(now())
+  createdAt DateTime  @default(now())
+
+  @@index([payrunId])
+}
