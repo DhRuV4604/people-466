@@ -121,6 +121,38 @@ enum EmailStatus {
   FAILED
 }
 
+enum DocumentKind {
+  JOINING_LETTER
+  OFFER_LETTER
+  NDA
+  CONTRACT
+  POLICY
+  ID_PROOF
+  ADDRESS_PROOF
+  QUALIFICATION
+  OTHER
+}
+
+/// Where a document has got to.
+///
+/// One list covers both directions. HR asking an employee for a passport scan
+/// and HR sending them an NDA to sign are the same object at different points:
+/// something is outstanding, then it is not.
+enum DocumentStatus {
+  /// Uploaded by HR, not yet sent. Only they can see it.
+  DRAFT
+  /// HR asked the employee for a file. Nothing attached yet.
+  REQUESTED
+  /// Sent to the employee, waiting for their signature.
+  AWAITING_SIGNATURE
+  /// The employee supplied the file a REQUESTED document asked for.
+  SUBMITTED
+  SIGNED
+  DECLINED
+  /// Withdrawn by HR, or superseded. Kept, never deleted.
+  CANCELLED
+}
+
 // ---------------------------------------------------------------- Access control
 
 model User {
@@ -138,6 +170,8 @@ model User {
   employee           Employee?
   auditLogs          AuditLog[]
   notifications      Notification[]
+  uploadedFiles      StoredFile[]   @relation("FileUploader")
+  authoredDocuments  Document[]     @relation("DocumentAuthor")
   createdAt          DateTime       @default(now())
   updatedAt          DateTime       @updatedAt
 }
@@ -200,11 +234,18 @@ model Employee {
   userId String @db.Uuid @unique
   user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
 
+  /// Profile picture. A file like any other, so it is served and permissioned
+  /// the same way rather than through a second path that has to be secured
+  /// all over again.
+  avatarId String?     @db.Uuid
+  avatar   StoredFile? @relation("EmployeeAvatar", fields: [avatarId], references: [id])
+
   contracts        Contract[]
   attendances      Attendance[]
   leaveRequests    LeaveRequest[]
   leaveAllocations LeaveAllocation[]
   payslips         Payslip[]
+  documents        Document[]
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -683,4 +724,89 @@ model AppSettings {
   warnOnCheckOut Boolean @default(true)
 
   updatedAt DateTime @updatedAt
+}
+
+// ---------------------------------------------------------------- Documents
+
+/// A file on disk, described.
+///
+/// Separate from the thing that refers to it because a signed document is two
+/// files - what was sent and what came back stamped - and an avatar is a file
+/// with no document around it at all. Nothing here is ever overwritten: a
+/// signature attests to a specific set of bytes, so a new version is a new row.
+model StoredFile {
+  id       String @id @default(uuid(7)) @db.Uuid
+  /// Path relative to the storage root. Never absolute, never from the client:
+  /// it is generated, so a filename cannot escape the directory it belongs in.
+  key      String @unique
+  /// What the person called it. Shown in the UI, used for the download name.
+  filename String
+  mimeType String
+  size     Int
+  /// SHA-256 of the bytes. What a signature is actually attesting to, and how
+  /// a tampered file is spotted.
+  checksum String
+
+  uploadedById String @db.Uuid
+  uploadedBy   User   @relation("FileUploader", fields: [uploadedById], references: [id])
+
+  documentOriginals Document[] @relation("DocumentFile")
+  documentSigned    Document[] @relation("DocumentSignedFile")
+  employeeAvatars   Employee[] @relation("EmployeeAvatar")
+
+  createdAt DateTime @default(now())
+}
+
+/// Something in one person's file: sent to them, asked of them, or signed.
+model Document {
+  id     String         @id @default(uuid(7)) @db.Uuid
+  title  String
+  kind   DocumentKind   @default(OTHER)
+  status DocumentStatus @default(DRAFT)
+  /// Shown to the employee above the document. Why they are being sent it.
+  message String?
+
+  /// Whose file this belongs in.
+  employeeId String   @db.Uuid
+  employee   Employee @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+
+  /// The document itself. Null while status is REQUESTED: nothing exists yet.
+  fileId String?     @db.Uuid
+  file   StoredFile? @relation("DocumentFile", fields: [fileId], references: [id])
+
+  /// The stamped copy, written on signing. The original is kept untouched, so
+  /// what was agreed to can always be produced.
+  signedFileId String?     @unique @db.Uuid
+  signedFile   StoredFile? @relation("DocumentSignedFile", fields: [signedFileId], references: [id])
+
+  requiresSignature Boolean @default(false)
+
+  createdById String @db.Uuid
+  createdBy   User   @relation("DocumentAuthor", fields: [createdById], references: [id])
+
+  sentAt      DateTime?
+  submittedAt DateTime?
+  signedAt    DateTime?
+  declinedAt  DateTime?
+  /// Why they would not sign. Their words, shown to HR.
+  declineReason String?
+
+  /// What was signed, captured at the moment of signing.
+  ///
+  /// Recorded rather than derived: the point of an audit trail is that it
+  /// still says what happened after the employee's name, the file, or this
+  /// software has changed.
+  signerName      String?
+  signerEmail     String?
+  signerIp        String?
+  signerUserAgent String?
+  /// Checksum of the file as it was when signed, so a swap is detectable.
+  signedChecksum  String?
+  /// The drawn or typed mark, as a PNG data URL.
+  signatureImage  String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([employeeId, status])
 }

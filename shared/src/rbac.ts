@@ -20,6 +20,7 @@ export type Module =
   | 'salaryStructures'
   | 'salaryRules'
   | 'dashboard'
+  | 'documents'
   | 'auditLogs';
 
 export type Action = 'read' | 'create' | 'update' | 'delete' | 'approve';
@@ -50,6 +51,10 @@ const employeeMatrix: RoleMatrix = {
   salaryStructures: NONE,
   salaryRules: NONE,
   dashboard: NONE,
+  // Their own file only, narrowed by the API the same way payslips are. Create
+  // is what lets them answer a request for a document; signing is guarded on
+  // the record itself, by whether it was sent to them.
+  documents: { read: true, create: true },
   // The trail records what everyone did, so only an admin may read it.
   auditLogs: NONE,
 };
@@ -69,6 +74,8 @@ const hrManagerMatrix: RoleMatrix = {
   salaryStructures: NONE,
   salaryRules: NONE,
   dashboard: NONE,
+  // Managing people's files is HR's job before it is anyone else's.
+  documents: FULL,
   // The trail records what everyone did, so only an admin may read it.
   auditLogs: NONE,
 };
@@ -103,6 +110,7 @@ const adminMatrix: RoleMatrix = {
   salaryStructures: FULL,
   salaryRules: FULL,
   dashboard: FULL,
+  documents: FULL,
   // Read only, for everyone including the admin: a trail that can be edited or
   // pruned by the people it records is not a trail.
   auditLogs: READ,

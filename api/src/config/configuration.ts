@@ -10,6 +10,10 @@ export interface AppConfig {
   corsOrigins: string[];
   /** Where an invite tells a new colleague to sign in. */
   signInUrl: string;
+  storage: {
+    /** Where uploaded files are written. A mounted volume in Compose. */
+    root: string;
+  };
   mail: {
     acsConnectionString: string;
     acsSenderAddress: string;
@@ -48,6 +52,9 @@ export default (): AppConfig => {
       .split(',')
       .map((o) => o.trim())
       .filter(Boolean),
+    storage: {
+      root: process.env.STORAGE_ROOT ?? './storage',
+    },
     mail: {
       /**
        * Delivery provider, chosen by what is configured rather than by a flag:

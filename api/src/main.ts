@@ -13,6 +13,13 @@ async function bootstrap(): Promise<void> {
 
   app.setGlobalPrefix('api');
 
+  // A drawn signature arrives as a PNG data URL, which is comfortably past the
+  // 100 kB Express allows a JSON body by default. Raised only far enough to
+  // carry one; uploads go through multipart, which has its own limit.
+  const { json, urlencoded } = await import('express');
+  app.use(json({ limit: '4mb' }));
+  app.use(urlencoded({ extended: true, limit: '4mb' }));
+
   // crossOriginResourcePolicy is relaxed so the web app on another origin can
   // embed payslip PDFs served by this API.
   app.use(helmet({ crossOriginResourcePolicy: { policy: 'cross-origin' } }));

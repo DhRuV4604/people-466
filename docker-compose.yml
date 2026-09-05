@@ -45,6 +45,11 @@ services:
       SMTP_USER: ${SMTP_USER:-}
       SMTP_PASSWORD: ${SMTP_PASSWORD:-}
       MAIL_FROM: ${MAIL_FROM:-payroll@peoplepay360.com}
+      # Uploaded files. A named volume, so a rebuild does not take the
+      # signed documents with it.
+      STORAGE_ROOT: /data/storage
+    volumes:
+      - peoplepay_files:/data/storage
     ports:
       - '${API_PORT:-4000}:4000'
     healthcheck:
@@ -89,3 +94,6 @@ services:
 
 volumes:
   peoplepay_pgdata:
+  # Uploaded documents, signed copies and avatars. Kept apart from the database
+  # volume so either can be backed up or moved without the other.
+  peoplepay_files:

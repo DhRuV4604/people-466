@@ -539,3 +539,66 @@ export interface NotificationSummaryDto {
   unread: number;
   items: NotificationDto[];
 }
+
+// ---------------------------------------------------------------- Documents
+
+export const DOCUMENT_KINDS = [
+  'JOINING_LETTER',
+  'OFFER_LETTER',
+  'NDA',
+  'CONTRACT',
+  'POLICY',
+  'ID_PROOF',
+  'ADDRESS_PROOF',
+  'QUALIFICATION',
+  'OTHER',
+] as const;
+export type DocumentKind = (typeof DOCUMENT_KINDS)[number];
+
+export const DOCUMENT_STATUSES = [
+  'DRAFT',
+  'REQUESTED',
+  'AWAITING_SIGNATURE',
+  'SUBMITTED',
+  'SIGNED',
+  'DECLINED',
+  'CANCELLED',
+] as const;
+export type DocumentStatus = (typeof DOCUMENT_STATUSES)[number];
+
+export interface StoredFileDto {
+  id: string;
+  filename: string;
+  mimeType: string;
+  size: number;
+}
+
+export interface DocumentDto {
+  id: string;
+  title: string;
+  kind: DocumentKind;
+  status: DocumentStatus;
+  message: string | null;
+  requiresSignature: boolean;
+  employeeId: string;
+  employee?: { id: string; fullName: string; employeeCode: string };
+  file: StoredFileDto | null;
+  signedFile: StoredFileDto | null;
+  createdBy: { id: string; name: string };
+  sentAt: ISODate | null;
+  submittedAt: ISODate | null;
+  signedAt: ISODate | null;
+  declinedAt: ISODate | null;
+  declineReason: string | null;
+  createdAt: ISODate;
+}
+
+/** What the certificate page records. Shown to HR beside a signed document. */
+export interface DocumentSignatureDto {
+  signerName: string | null;
+  signerEmail: string | null;
+  signerIp: string | null;
+  signerUserAgent: string | null;
+  signedChecksum: string | null;
+  signedAt: ISODate | null;
+}
