@@ -2,15 +2,21 @@ node_modules/
 .next/
 out/
 build/
+dist/
 *.log
 npm-debug.log*
 .DS_Store
-*.db
-*.db-journal
-prisma/dev.db
-prisma/dev.db-journal
+
+# Environment files hold secrets; only .env.example is committed.
 .env
 .env.local
 .env.production
+**/.env
+**/.env.local
+
 next-env.d.ts
-tsconfig.tsbuildinfo
+*.tsbuildinfo
+**/*.tsbuildinfo
+
+# Leftover SQLite database from the pre-PostgreSQL version.
+prisma/

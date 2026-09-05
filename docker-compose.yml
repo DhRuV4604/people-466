@@ -1,0 +1,70 @@
+# PeoplePay360 local stack.
+#
+# Postgres is published on 5433 rather than the default 5432 to avoid colliding
+# with any other Postgres already running on the host.
+services:
+  db:
+    image: postgres:16-alpine
+    container_name: peoplepay360-db
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-peoplepay}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-peoplepay_dev_pw}
+      POSTGRES_DB: ${POSTGRES_DB:-peoplepay360}
+    ports:
+      - '${POSTGRES_PORT:-5433}:5432'
+    volumes:
+      - peoplepay_pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -U ${POSTGRES_USER:-peoplepay} -d ${POSTGRES_DB:-peoplepay360}']
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  api:
+    build:
+      context: .
+      dockerfile: apps/api/Dockerfile
+    container_name: peoplepay360-api
+    restart: unless-stopped
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      NODE_ENV: production
+      PORT: 4000
+      # Inside the compose network the database listens on its own 5432.
+      DATABASE_URL: postgresql://${POSTGRES_USER:-peoplepay}:${POSTGRES_PASSWORD:-peoplepay_dev_pw}@db:5432/${POSTGRES_DB:-peoplepay360}?schema=public
+      JWT_SECRET: ${JWT_SECRET:-change-me-in-production-a-long-random-string}
+      JWT_EXPIRES_IN: ${JWT_EXPIRES_IN:-7d}
+      CORS_ORIGIN: ${CORS_ORIGIN:-http://localhost:3000}
+      SMTP_HOST: ${SMTP_HOST:-}
+      SMTP_PORT: ${SMTP_PORT:-587}
+      SMTP_USER: ${SMTP_USER:-}
+      SMTP_PASSWORD: ${SMTP_PASSWORD:-}
+      MAIL_FROM: ${MAIL_FROM:-payroll@peoplepay360.com}
+    ports:
+      - '${API_PORT:-4000}:4000'
+
+  web:
+    build:
+      context: .
+      dockerfile: apps/web/Dockerfile
+      args:
+        # Baked in at build time because Next.js inlines NEXT_PUBLIC_* values.
+        NEXT_PUBLIC_API_URL: ${NEXT_PUBLIC_API_URL:-http://localhost:4000}
+    container_name: peoplepay360-web
+    restart: unless-stopped
+    depends_on:
+      - api
+    environment:
+      NODE_ENV: production
+      PORT: 3000
+      # Server-side calls travel over the compose network, not via localhost.
+      API_URL: http://api:4000
+      NEXT_PUBLIC_API_URL: ${NEXT_PUBLIC_API_URL:-http://localhost:4000}
+    ports:
+      - '${WEB_PORT:-3000}:3000'
+
+volumes:
+  peoplepay_pgdata:
