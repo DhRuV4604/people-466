@@ -35,7 +35,9 @@ export type AuditRow = AuditLogDto & {
 const NO_DIFF: Partial<Record<AuditAction, string>> = {
   CREATE: "The record starts here, so there is nothing to compare it with.",
   LOGIN: "A sign-in changes no record. It is kept so the trail shows who was in.",
-  DELETE: "No snapshot was kept, so this record cannot be read back.",
+  // The database keeps the deleted record, but AuditLogDto has no field to
+  // carry it, so this must not claim the record is gone for good.
+  DELETE: "This entry does not carry what the record held, only that it was removed.",
 };
 
 /**

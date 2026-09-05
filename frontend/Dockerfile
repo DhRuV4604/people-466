@@ -11,13 +11,15 @@ WORKDIR /repo
 # Only the manifests, so this layer is reused until a dependency actually
 # changes rather than on every source edit.
 COPY package.json package-lock.json ./
-COPY packages/shared/package.json packages/shared/
-COPY apps/api/package.json apps/api/
+COPY shared/package.json shared/
+COPY api/package.json api/
 COPY frontend/package.json frontend/
 # The API generates its Prisma client on install, so the schema has to be here
 # before `npm ci` rather than arriving with the rest of the sources.
-COPY apps/api/prisma apps/api/prisma
-RUN npm ci
+COPY api/prisma api/prisma
+# The npm store is cached between builds, so a rebuild resolves from disk
+# rather than re-downloading every tarball.
+RUN --mount=type=cache,target=/root/.npm npm ci
 
 # ---------------------------------------------------------------- build
 FROM deps AS build
@@ -29,7 +31,7 @@ ARG NEXT_PUBLIC_API_URL=http://localhost:4000
 ENV NEXT_PUBLIC_API_URL=$NEXT_PUBLIC_API_URL
 ENV NEXT_TELEMETRY_DISABLED=1
 
-COPY packages/shared packages/shared
+COPY shared shared
 COPY frontend frontend
 
 # The web build reads the shared package's compiled output, so it goes first.

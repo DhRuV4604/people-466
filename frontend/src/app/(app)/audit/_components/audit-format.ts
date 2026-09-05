@@ -1,4 +1,4 @@
-import type { AuditAction } from "@peoplepay360/shared";
+import { ROLE_LABELS, type AuditAction } from "@peoplepay360/shared";
 
 import { formatDate, formatTime, money } from "@/lib/format";
 import { statusLabel } from "@/lib/status";
@@ -59,12 +59,25 @@ export function entityLabel(entity: string): string {
   return ENTITY_LABELS[entity] ?? humanise(entity);
 }
 
-/** A relation column names the thing, not its id: "employeeId" is "Employee". */
+/**
+ * A relation column names the thing, not its id: "employeeId" is "Employee".
+ * Only a real suffix counts - a lowercase "id" is often the end of a word, and
+ * the schema has a `paid` flag that would otherwise be labelled "Pa".
+ */
 export function fieldLabel(field: string): string {
-  return humanise(field.replace(/_?[Ii]d$/, "") || field);
+  return humanise(field.replace(/_id$/, "").replace(/([a-z0-9])Id$/, "$1") || field);
 }
 
+/** Checked before money, because "amountPercentage" is named for the money it
+ *  applies to and reading it as rupees changes what the row means. */
+const PERCENT_FIELD = /percent/i;
 const MONEY_FIELD = /wage|amount|salary|gross|net|total|basic|balance|cost|price/i;
+const HOURS_FIELD = /hours/i;
+const ROLE_FIELD = /^(?:user)?role$/i;
+/** A code is not an enum. "HRA" is a salary rule, "HDFC" is a bank and "UTC"
+ *  is a zone; read as statuses they become "Hra", "Hdfc" and "Utc". */
+const CODE_FIELD = /code|number|bank|ifsc|iban|pan|zone/i;
+
 const NUMERIC = /^-?\d+(?:\.\d+)?$/;
 const ISO = /^\d{4}-\d{2}-\d{2}(?:T\d{2}:\d{2}:\d{2}(?:\.\d+)?Z?)?$/;
 /** Letters and underscores only, so an account number or a code is not
@@ -72,6 +85,8 @@ const ISO = /^\d{4}-\d{2}-\d{2}(?:T\d{2}:\d{2}:\d{2}(?:\.\d+)?Z?)?$/;
 const CONSTANT = /^[A-Z][A-Z_]{2,}$/;
 
 const NUMBER = new Intl.NumberFormat("en-GB", { maximumFractionDigits: 2 });
+/** A rate is stored to four places, and rounding one hides what changed. */
+const RATE = new Intl.NumberFormat("en-GB", { maximumFractionDigits: 4 });
 
 /** What an absent value reads as, wherever one turns up. */
 export const NOTHING = "—";
@@ -84,20 +99,37 @@ export function formatValue(field: string, value: unknown): string {
   if (value === null || value === undefined || value === "") return NOTHING;
   if (typeof value === "boolean") return value ? "Yes" : "No";
 
-  const isMoney = MONEY_FIELD.test(field);
+  const isPercent = PERCENT_FIELD.test(field);
+  const isMoney = !isPercent && MONEY_FIELD.test(field);
+  const isHours = !isPercent && !isMoney && HOURS_FIELD.test(field);
 
-  if (typeof value === "number") {
-    return isMoney ? money(value) : NUMBER.format(value);
-  }
+  const asNumber = (n: number): string =>
+    isPercent
+      ? `${RATE.format(n)}%`
+      : isMoney
+        ? money(n)
+        : // Not lib/format's `hours`: it rounds to one place, and two hours
+          // stored a hundredth apart would then read as the same number on
+          // either side of an arrow.
+          `${NUMBER.format(n)}${isHours ? "h" : ""}`;
+
+  if (typeof value === "number") return asNumber(value);
 
   if (typeof value === "string") {
-    // A Decimal column crosses the wire as a string, so the money test has to
-    // run before the value is taken for text.
-    if (isMoney && NUMERIC.test(value)) return money(Number(value));
+    // A Decimal column crosses the wire as a string, so the numeric tests have
+    // to run before the value is taken for text.
+    if ((isPercent || isMoney || isHours) && NUMERIC.test(value)) {
+      return asNumber(Number(value));
+    }
+
+    // A role has a vocabulary of its own, and read as a status it comes out
+    // "Hr payroll manager".
+    const role = (ROLE_LABELS as Record<string, string>)[value];
+    if (role && ROLE_FIELD.test(field)) return role;
 
     // A status change is the most common edit there is, and it is worth
     // nothing if it reads "TO_APPROVE" instead of "To approve".
-    if (CONSTANT.test(value)) return statusLabel(value);
+    if (CONSTANT.test(value) && !CODE_FIELD.test(field)) return statusLabel(value);
 
     if (ISO.test(value)) {
       const time = formatTime(value);

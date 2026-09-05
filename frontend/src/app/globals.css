@@ -129,3 +129,32 @@
   }
 }
 
+
+/**
+ * A scrollbar that is present without being loud. The platform default is a
+ * heavy bar that dominates a narrow column like the sidebar; hiding it outright
+ * would leave no clue that there is more to see, so it is thinned and tinted to
+ * the border colour instead.
+ */
+@utility scrollbar-thin {
+  scrollbar-width: thin;
+  scrollbar-color: var(--border) transparent;
+
+  &::-webkit-scrollbar {
+    width: 6px;
+    height: 6px;
+  }
+
+  &::-webkit-scrollbar-track {
+    background: transparent;
+  }
+
+  &::-webkit-scrollbar-thumb {
+    background-color: var(--border);
+    border-radius: 9999px;
+  }
+
+  &::-webkit-scrollbar-thumb:hover {
+    background-color: var(--muted-foreground);
+  }
+}

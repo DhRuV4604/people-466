@@ -11,9 +11,37 @@ import { SESSION_COOKIE } from "@/lib/api-client";
  * subscribes here, the Next server attaches the token, and the upstream stream
  * is piped straight back. The API still decides whose notifications these are.
  */
+
+const STREAM_HEADERS = {
+  "Content-Type": "text/event-stream; charset=utf-8",
+  // Nothing may sit on this response. `no-transform` keeps compressors off it —
+  // a compressor would hold events back until its window filled — and
+  // `X-Accel-Buffering` says the same thing to an nginx in front.
+  "Cache-Control": "private, no-cache, no-store, no-transform",
+  "X-Accel-Buffering": "no",
+};
+
+/** Long enough not to hammer an API that is down, short enough to feel live. */
+const RETRY_MS = 10_000;
+
+/**
+ * An empty stream that asks to be reconnected.
+ *
+ * EventSource only retries after a stream it had *opened* ends; answering with
+ * a status instead makes it give up for good. So a restarting API — every
+ * deploy — would otherwise cost every open tab its live bell until someone
+ * reloaded the page. This says the same thing in the one shape the browser
+ * treats as recoverable.
+ */
+function reconnectLater(): NextResponse {
+  return new NextResponse(`retry: ${RETRY_MS}\n\n`, { headers: STREAM_HEADERS });
+}
+
 export async function GET(request: Request) {
   const token = (await cookies()).get(SESSION_COOKIE)?.value;
 
+  // Signed out is not a blip: reconnecting would never start working, and the
+  // page itself is about to be redirected to the login screen.
   if (!token) {
     return NextResponse.json({ message: "Not signed in." }, { status: 401 });
   }
@@ -41,21 +69,16 @@ export async function GET(request: Request) {
     signal: request.signal,
   }).catch(() => null);
 
-  if (!upstream?.ok || !upstream.body) {
+  // An expired or rejected token is the other permanent answer.
+  if (upstream && (upstream.status === 401 || upstream.status === 403)) {
     return NextResponse.json(
-      { message: "Could not open the notification stream." },
-      { status: upstream?.status || 502 },
+      { message: "Not allowed to read this stream." },
+      { status: upstream.status },
     );
   }
 
-  return new NextResponse(upstream.body, {
-    headers: {
-      "Content-Type": "text/event-stream; charset=utf-8",
-      // Nothing may sit on this response. `no-transform` keeps compressors off
-      // it — a compressor would hold events back until its window filled — and
-      // `X-Accel-Buffering` says the same thing to an nginx in front.
-      "Cache-Control": "private, no-cache, no-store, no-transform",
-      "X-Accel-Buffering": "no",
-    },
-  });
+  // Anything else — unreachable, restarting, a gateway in the way — is a blip.
+  if (!upstream?.ok || !upstream.body) return reconnectLater();
+
+  return new NextResponse(upstream.body, { headers: STREAM_HEADERS });
 }

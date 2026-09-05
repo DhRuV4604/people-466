@@ -7,14 +7,14 @@ into validated payslips that can be downloaded as PDF or emailed.
 
 ```
 ┌──────────────┐        ┌──────────────┐        ┌──────────────┐
-│   frontend   │  HTTP  │   apps/api   │  SQL   │  PostgreSQL  │
+│   frontend   │  HTTP  │   api   │  SQL   │  PostgreSQL  │
 │   Next.js    │ ─────► │    NestJS    │ ─────► │      16      │
 │    :3000     │ bearer │    :4000     │ Prisma │    :5433     │
 └──────────────┘        └──────────────┘        └──────────────┘
         │                       │
         └───────┬───────────────┘
                 ▼
-     packages/shared — types, enums, RBAC matrix, domain maths
+     shared — types, enums, RBAC matrix, domain maths
 ```
 
 The API is the only thing that touches the database, so authorisation cannot be sidestepped by
@@ -70,7 +70,7 @@ accounts start at Employees rather than the overview.
 
 ```
 people-466/
-├── apps/api/               NestJS REST API — the only database client
+├── api/               NestJS REST API — the only database client
 │   ├── prisma/             schema, migrations, seed
 │   └── src/
 │       ├── common/         guards, filters, decorators, validation, decimals
@@ -82,7 +82,7 @@ people-466/
 │       ├── app/            routes and server actions
 │       ├── components/     ui (library) · data (lists) · form (writes) · app (shell)
 │       └── lib/            api client, session, access, fields, mutations, formatting
-├── packages/shared/        types, enums, RBAC matrix, pure domain maths
+├── shared/        types, enums, RBAC matrix, pure domain maths
 ├── docker-compose.yml      db + api + web
 └── docs/                   see below
 ```

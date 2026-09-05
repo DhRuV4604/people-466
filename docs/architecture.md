@@ -6,7 +6,7 @@ where they do.
 ## The three packages
 
 ```
-packages/shared ──────► apps/api ──────► PostgreSQL
+shared ──────► api ──────► PostgreSQL
        │                    ▲
        │                    │ HTTP + bearer token
        └──────────────► frontend
@@ -14,9 +14,9 @@ packages/shared ──────► apps/api ──────► PostgreSQL
 
 | Package | Name | Responsibility |
 |---|---|---|
-| `apps/api` | `@peoplepay360/api` | Every database read and write. Authorisation. Payroll computation. |
+| `api` | `@peoplepay360/api` | Every database read and write. Authorisation. Payroll computation. |
 | `frontend` | `@peoplepay360/web` | Rendering, forms, navigation. Holds a session cookie and an HTTP client. |
-| `packages/shared` | `@peoplepay360/shared` | Types, enums, the RBAC matrix, pure domain maths. |
+| `shared` | `@peoplepay360/shared` | Types, enums, the RBAC matrix, pure domain maths. |
 
 They are npm workspaces, so `@peoplepay360/shared` resolves by symlink to the sources in this
 repository rather than to a published copy. Editing a shared type is immediately visible to both
@@ -86,7 +86,7 @@ takes effect at once rather than at token expiry.
 
 ## Authorisation
 
-One matrix in `packages/shared/src/rbac.ts` maps role → module → action:
+One matrix in `shared/src/rbac.ts` maps role → module → action:
 
 ```ts
 can(role, 'payruns', 'create')     // boolean
@@ -135,7 +135,7 @@ A screen composes; it does not define new primitives. See [frontend.md](frontend
 
 Every primary key is a **cuid** (`@default(cuid())`), not a UUID. This bit once: the DTOs
 validated ids with `IsUUID` and the routes with `ParseUUIDPipe`, so every by-id route and every
-relation filter returned 400. `apps/api/src/common/validation/entity-id.ts` now provides
+relation filter returned 400. `api/src/common/validation/entity-id.ts` now provides
 `IsEntityId` and `ParseEntityIdPipe`, which match the ids the database actually issues. There
 are no `IsUUID` or `ParseUUIDPipe` left in the modules, and none should return.
 

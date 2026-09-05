@@ -78,35 +78,44 @@ export function NotificationBell({
   const [, startTransition] = React.useTransition();
 
   const [open, setOpen] = React.useState(false);
-  const [items, setItems] = React.useState(initial.items);
-  // The server counts every unread notification; the popover only holds the
-  // first page of them, so the badge cannot be derived from the list.
-  const [unread, setUnread] = React.useState(initial.unread);
-
-  // Ids already reflected above. The seed and the stream can both deliver the
-  // same notification when one arrives while the page is loading, and it must
-  // only be counted once.
-  const known = React.useRef(new Set<string>());
+  // The list and the count are one piece of state, so a new arrival can be
+  // deduplicated and counted in the same update. Kept apart they would need a
+  // ref of seen ids, which cannot be read during render.
+  //
+  // The server counts every unread notification while the popover holds only
+  // the first page, so the badge is not derivable from the list.
+  const [{ items, unread }, setFeed] = React.useState(initial);
 
   // A write revalidates the layout, which re-renders the server component that
   // seeds this one. Taking the new seed is what keeps the optimistic state
   // honest: whatever the browser guessed, the API's answer replaces it.
-  React.useEffect(() => {
-    setItems(initial.items);
-    setUnread(initial.unread);
-    for (const item of initial.items) known.current.add(item.id);
-  }, [initial]);
+  //
+  // Adjusted during render rather than in an effect, the way FilterBar syncs
+  // its search box: an effect would paint the stale list first and then
+  // replace it, and the React Compiler rules reject it besides.
+  const [seed, setSeed] = React.useState(initial);
+  if (seed !== initial) {
+    setSeed(initial);
+    setFeed(initial);
+  }
 
   React.useEffect(() => {
     const source = new EventSource("/api/notifications/stream");
 
     const receive = (event: MessageEvent<string>) => {
       const arrival = parse(event.data);
-      if (!arrival || known.current.has(arrival.id)) return;
-      known.current.add(arrival.id);
+      if (!arrival) return;
 
-      setItems((current) => [arrival, ...current].slice(0, LIMIT));
-      if (!arrival.readAt) setUnread((count) => count + 1);
+      // The seed and the stream can both carry the same notification when one
+      // lands while the page is still loading, so it is counted only if the
+      // list does not already hold it.
+      setFeed((current) => {
+        if (current.items.some((item) => item.id === arrival.id)) return current;
+        return {
+          items: [arrival, ...current.items].slice(0, LIMIT),
+          unread: arrival.readAt ? current.unread : current.unread + 1,
+        };
+      });
     };
 
     // EventSource reconnects by itself on the interval the server sends, so
@@ -130,6 +139,10 @@ export function NotificationBell({
   const [now, setNow] = React.useState<number | null>(null);
 
   React.useEffect(() => {
+    // The current time is browser state the server cannot know, so after mount
+    // is the earliest it can be read. Rendering it any sooner is the hydration
+    // mismatch this whole arrangement exists to avoid.
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     setNow(Date.now());
     const tick = setInterval(() => setNow(Date.now()), 30_000);
     return () => clearInterval(tick);
@@ -139,20 +152,26 @@ export function NotificationBell({
     (run: () => Promise<{ ok?: boolean; error?: string }>) => {
       startTransition(async () => {
         const state = await run();
-        // Success is already on screen, so only a failure is worth a toast.
-        if (!state.ok) toast(state.error ?? "That didn't work.", "error");
+        if (state.ok) return; // Success is already on screen.
+
+        toast(state.error ?? "That didn't work.", "error");
+        // The optimistic count is now a lie, and only a failed write skips the
+        // revalidation that would have corrected it, so ask for the truth.
+        router.refresh();
       });
     },
-    [toast],
+    [router, toast],
   );
 
   const openNotification = (item: NotificationDto) => {
     if (!item.readAt) {
       const readAt = new Date().toISOString();
-      setItems((current) =>
-        current.map((row) => (row.id === item.id ? { ...row, readAt } : row)),
-      );
-      setUnread((count) => Math.max(0, count - 1));
+      setFeed((current) => ({
+        items: current.items.map((row) =>
+          row.id === item.id ? { ...row, readAt } : row,
+        ),
+        unread: Math.max(0, current.unread - 1),
+      }));
       report(() => markNotificationRead(item.id));
     }
 
@@ -167,10 +186,10 @@ export function NotificationBell({
 
   const markAll = () => {
     const readAt = new Date().toISOString();
-    setItems((current) =>
-      current.map((row) => (row.readAt ? row : { ...row, readAt })),
-    );
-    setUnread(0);
+    setFeed((current) => ({
+      items: current.items.map((row) => (row.readAt ? row : { ...row, readAt })),
+      unread: 0,
+    }));
     report(markAllNotificationsRead);
   };
 
@@ -290,8 +309,10 @@ export function NotificationBell({
         ) : null}
 
         {/* The badge changes on its own when something arrives, and a silent
-            change is invisible to a screen reader. This says it out loud. */}
-        <span role="status" aria-live="polite" className="sr-only">
+            change is invisible to a screen reader. This says it out loud —
+            without role="status", which the toast layer already holds: two of
+            them is one live region more than the page means to have. */}
+        <span aria-live="polite" aria-atomic className="sr-only">
           {unread > 0 ? `${unread} unread notifications` : ""}
         </span>
       </div>

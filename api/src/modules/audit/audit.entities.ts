@@ -17,8 +17,13 @@ export interface ModelSpec {
   include?: Record<string, unknown>;
   label(row: AuditRow): string | null;
   /**
-   * Recomputed by the service from other fields written in the same request,
-   * so a diff of them echoes the change rather than describing it.
+   * Columns nobody chose: recomputed by the service from other fields written
+   * in the same request, or stamped by it to record the very act the row is
+   * already recording. A diff of them echoes the change rather than describing
+   * it - a refusal that lists `refusedBy` and `refusedAt` next to the name and
+   * the time of the person who refused it says nothing twice, and `allocationId`
+   * says it in a cuid. They stay in a delete snapshot, which is the record
+   * itself rather than an account of a decision.
    */
   derived?: readonly string[];
 }
@@ -64,22 +69,35 @@ export const AUDITED_MODELS: Record<string, ModelSpec> = {
   Attendance: {
     include: EMPLOYEE_NAME,
     label: (r) => join(person(r.employee), day(r.checkIn)),
-    derived: ['workedHours', 'overtimeHours'],
+    // editReason is left in: the words are the correction's justification, and
+    // the only part of it the trail does not already hold.
+    derived: ['workedHours', 'overtimeHours', 'manuallyEdited', 'editedById', 'editedAt'],
   },
   TimeOffType: { label: (r) => text(r.name) },
   LeaveAllocation: {
     include: { ...EMPLOYEE_NAME, type: { select: { name: true } } },
     label: (r) => join(person(r.employee), named(r.type)),
+    derived: ['approvedBy', 'approvedAt'],
   },
   LeaveRequest: {
     include: { ...EMPLOYEE_NAME, type: { select: { name: true } } },
     label: (r) => join(person(r.employee), named(r.type), `${day(r.dateFrom)} to ${day(r.dateTo)}`),
+    // duration follows the dates, and the allocation the request consumes is
+    // picked by the approval rather than by anyone; refuseReason stays.
+    derived: ['duration', 'allocationId', 'approvedBy', 'approvedAt', 'refusedBy', 'refusedAt'],
   },
   SalaryStructure: { label: (r) => text(r.name) },
   SalaryRule: {
     label: (r) => (text(r.name) && text(r.code) ? `${text(r.name)} (${text(r.code)})` : text(r.name)),
   },
-  Payrun: { label: (r) => text(r.name) },
+  Payrun: {
+    label: (r) => text(r.name),
+    // Each is stamped by the verb route that also moves `status`, so the status
+    // line and the row's own action already say both what and when.
+    derived: ['computedAt', 'validatedAt', 'paidAt', 'paidBy'],
+  },
+  // The computed totals are deliberately not derived here: a recompute is the
+  // one action whose whole point is what the money became.
   Payslip: {
     include: EMPLOYEE_NAME,
     label: (r) => join(person(r.employee), text(r.number)),

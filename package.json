@@ -4,9 +4,9 @@
   "private": true,
   "description": "Integrated HR & Payroll operations platform",
   "workspaces": [
-    "packages/*",
-    "apps/*",
-    "frontend"
+    "api",
+    "frontend",
+    "shared"
   ],
   "scripts": {
     "setup": "npm run db:up && npm run build -w @peoplepay360/shared && npm run db:migrate && npm run db:seed",

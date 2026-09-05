@@ -9,7 +9,7 @@ Three containers, defined in [`docker-compose.yml`](../docker-compose.yml).
 | Service | Image | Port | Depends on |
 |---|---|---|---|
 | `db` | `postgres:16-alpine` | `5433` → 5432 | — |
-| `api` | built from `apps/api/Dockerfile` | `4000` | `db` healthy |
+| `api` | built from `api/Dockerfile` | `4000` | `db` healthy |
 | `web` | built from `frontend/Dockerfile` | `3000` | `api` healthy |
 
 Each waits on the one below being **healthy**, not merely started: `db` answers `pg_isready`, and
@@ -107,12 +107,12 @@ npm run db:reset      # drop, re-migrate, reseed
 npm run db:studio     # browse
 ```
 
-Migrations live in `apps/api/prisma/migrations/` and are applied automatically on container start
+Migrations live in `api/prisma/migrations/` and are applied automatically on container start
 (`prisma migrate deploy`), followed by a seed if the database is still empty. A fresh volume
 therefore comes up usable.
 
 > The root `.gitignore` once carried a bare `prisma/` rule. That matches at **any depth**, so it
-> silently excluded `apps/api/prisma` — schema, migrations and seed were untracked. It is
+> silently excluded `api/prisma` — schema, migrations and seed were untracked. It is
 > anchored to `/prisma/` now. Check `git status` after touching ignore rules.
 
 ## Images
@@ -122,7 +122,7 @@ workspace has to resolve the same way it does locally:
 
 ```bash
 docker build -f frontend/Dockerfile .
-docker build -f apps/api/Dockerfile .
+docker build -f api/Dockerfile .
 ```
 
 The web image is three stages — install, build, run. The runtime stage carries only Next's
@@ -155,7 +155,7 @@ it must be `http://api:4000`, not `localhost`.
 
 **A by-id route returns 400.**
 Ids are cuids. If a DTO or route parameter validates them as UUIDs, every one of them fails. Use
-`IsEntityId` and `ParseEntityIdPipe` from `apps/api/src/common/validation/entity-id.ts`.
+`IsEntityId` and `ParseEntityIdPipe` from `api/src/common/validation/entity-id.ts`.
 
 **A create fails with "property … should not exist".**
 The API rejects unknown body fields rather than stripping them. Something is sending a value the
@@ -172,5 +172,5 @@ It should not be — the database is published on 5433. If you changed `POSTGRES
 **Changing `NEXT_PUBLIC_API_URL` had no effect.**
 It is inlined at build time. Rebuild the image: `npm run docker:up` rebuilds.
 
-**Type errors after editing `packages/shared`.**
+**Type errors after editing `shared`.**
 It is compiled. Rebuild it: `npm run build -w @peoplepay360/shared`.

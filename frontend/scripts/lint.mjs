@@ -6,16 +6,28 @@
  * `eslint-config-next` hoists to the root. From there its `require('next/...')`
  * for the parser cannot see `next`, and linting dies before it reads a file.
  * NODE_PATH bridges the two without pinning anyone's dependency versions.
+ *
+ * The binary is resolved rather than looked up on PATH, so this works when run
+ * directly as well as through an npm script.
  */
 import { spawnSync } from "node:child_process";
+import { createRequire } from "node:module";
 import path from "node:path";
 
-const here = import.meta.dirname;
-const result = spawnSync("eslint", process.argv.slice(2), {
-  cwd: path.join(here, ".."),
+const workspace = path.join(import.meta.dirname, "..");
+const require = createRequire(import.meta.url);
+
+// eslint's package entry sits beside its bin script, wherever npm put it.
+const eslintBin = path.join(
+  path.dirname(require.resolve("eslint/package.json")),
+  "bin",
+  "eslint.js",
+);
+
+const result = spawnSync(process.execPath, [eslintBin, ...process.argv.slice(2)], {
+  cwd: workspace,
   stdio: "inherit",
-  shell: true,
-  env: { ...process.env, NODE_PATH: path.join(here, "..", "node_modules") },
+  env: { ...process.env, NODE_PATH: path.join(workspace, "node_modules") },
 });
 
 process.exit(result.status ?? 1);

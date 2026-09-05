@@ -1,0 +1,19 @@
+# Normalise line endings in the repository, whatever the checkout platform.
+* text=auto eol=lf
+
+# These MUST stay LF. Docker does not strip a trailing carriage return, so a
+# CRLF .dockerignore silently matches nothing and the whole tree — including
+# node_modules and gigabytes of build cache — is sent as build context. That
+# cost this project a five-gigabyte context and several minutes per build.
+.dockerignore text eol=lf
+Dockerfile   text eol=lf
+*.sh         text eol=lf
+*.mjs        text eol=lf
+
+# Binary, never converted or diffed.
+*.pdf  binary
+*.png  binary
+*.jpg  binary
+*.ico  binary
+*.woff binary
+*.woff2 binary

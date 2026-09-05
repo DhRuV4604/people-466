@@ -1,7 +1,7 @@
 # Data model
 
 PostgreSQL 16 through Prisma 6. The schema is
-[`apps/api/prisma/schema.prisma`](../apps/api/prisma/schema.prisma); this explains the shape it
+[`api/prisma/schema.prisma`](../api/prisma/schema.prisma); this explains the shape it
 describes and the rules the services enforce on top of it.
 
 ## The shape
@@ -63,7 +63,7 @@ for one contract period without editing their employee record.
 
 `WorkingSchedule.hoursPerWeek` is a stored column, but it is always computed from the
 `WorkingScheduleLine` rows — the `{ dayOfWeek, startTime, endTime, breakHours }` weekly pattern —
-by a pure function in `packages/shared/src/domain.ts`. The API recomputes it on every write and
+by a pure function in `shared/src/domain.ts`. The API recomputes it on every write and
 ignores any value a client sends.
 
 Overnight shifts roll over correctly: a line running 22:00 → 06:00 is eight hours, not minus
@@ -106,7 +106,7 @@ no allocation, which is why its remaining figure is not a limit.
 
 ## The payroll engine
 
-`apps/api/src/modules/payroll/payroll-engine.service.ts`.
+`api/src/modules/payroll/payroll-engine.service.ts`.
 
 A `SalaryStructure` holds an ordered set of `SalaryRule`s. Computing a payslip walks them in
 ascending `sequence`, and **each result enters scope under its own code**, so a later rule can
@@ -165,7 +165,7 @@ out, so the flow is demonstrable without credentials.
 
 ## Enumerations
 
-All in `packages/shared/src/enums.ts` as plain const objects rather than TypeScript `enum`s, so
+All in `shared/src/enums.ts` as plain const objects rather than TypeScript `enum`s, so
 the values survive JSON transport unchanged and can be iterated to build a select.
 
 | Enum | Values |

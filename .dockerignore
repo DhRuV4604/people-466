@@ -1,25 +1,29 @@
 # Build contexts are the repository root, so keep out anything the images do
 # not need. node_modules especially: the Dockerfiles run their own `npm ci`,
 # and a host tree would carry the wrong platform's binaries into the image.
+#
+# Keep this file LF-only. Docker does not strip a trailing carriage return, so
+# with CRLF every pattern here silently matches nothing and the entire tree —
+# node_modules and gigabytes of .next cache included — is sent on every build.
 node_modules
 **/node_modules
 .git
 .next
 **/.next
-dist
 **/dist
-build
-**/build
+**/.turbo
+**/.cache
+**/coverage
+**/*.tsbuildinfo
 
 # Secrets never belong in an image layer.
 .env
 **/.env
-.env.*
-!.env.example
 **/.env.local
 
+# Nothing a build reads.
+docs
+*.pdf
 *.log
-*.md
-!README.md
 .vscode
 .idea

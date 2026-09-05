@@ -29,6 +29,11 @@ type SearchParams = Promise<{
  *  is reached by narrowing the filters rather than by scrolling. */
 const LIMIT = 200;
 
+/** What the API accepts for `q`. Past it the request is rejected and the whole
+ *  screen falls into the error boundary, so a pasted essay is cut instead - it
+ *  was never going to match anything the first 200 characters did not. */
+const MAX_SEARCH = 200;
+
 export default async function AuditPage({
   searchParams,
 }: {
@@ -42,7 +47,7 @@ export default async function AuditPage({
 
   const rows = await apiFetch<AuditLogDto[]>("/audit-logs", {
     query: {
-      q: params.q,
+      q: params.q?.slice(0, MAX_SEARCH),
       action: params.action,
       entity: params.entity,
       limit: LIMIT,

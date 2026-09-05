@@ -10,8 +10,13 @@ import type { AuditRow, ModelSpec } from './audit.entities';
  * dropped, and secrets never reach the row at all.
  */
 
-/** Never stored. A password hash in an audit log is a password hash on loan. */
-const SECRET = /password|secret|token/i;
+/**
+ * Never stored. A password hash in an audit log is a password hash on loan, and
+ * a bank account number is the same borrowed thing: the trail has to say that
+ * the details changed, or that a leaver's record held some, and has no business
+ * keeping its own copy of them after the record they belonged to is gone.
+ */
+const SECRET = /password|secret|token|bankAccount/i;
 export const REDACTED = '[redacted]';
 
 /** Maintained by the database, not chosen by anyone. */

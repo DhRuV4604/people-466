@@ -39,6 +39,13 @@ const isRow = (value: unknown): value is AuditRow =>
 const idOf = (row: AuditRow | null): string | null =>
   row && typeof row.id === 'string' ? row.id : null;
 
+/** createMany answers with a count; the ...AndReturn variants answer with rows. */
+function rowsWritten(result: unknown): number {
+  if (Array.isArray(result)) return result.length;
+  const count = (result as { count?: unknown } | null | undefined)?.count;
+  return typeof count === 'number' ? count : 0;
+}
+
 async function readRow(
   reader: Reader,
   model: string,
@@ -118,11 +125,19 @@ function auditExtension(reader: Reader) {
           // No request, no actor: seeds and start-up work are not someone's edit.
           if (!ctx) return query(args);
           if (!WRITES.has(operation)) {
-            if (BULK_WRITES.has(operation) && model !== 'AuditLog') {
+            if (!BULK_WRITES.has(operation) || model === 'AuditLog') return query(args);
+
+            // Counted only once it is known to have hit something. A bulk
+            // statement that matched no row changed nothing, and treating the
+            // statement as the write is how marking somebody else's
+            // notification read - which matches nothing, by design - reaches
+            // the trail as though it had done something.
+            const result = await query(args);
+            if (rowsWritten(result) > 0) {
               ctx.touched = true;
               ctx.touchedModel = ctx.touchedModel ?? model;
             }
-            return query(args);
+            return result;
           }
 
           if (model !== 'AuditLog') {

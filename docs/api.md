@@ -23,7 +23,7 @@ changed role takes effect immediately rather than at expiry.
 ### Authorisation
 
 Controllers declare `@RequirePermission(module, action)`, checked against the matrix in
-`packages/shared/src/rbac.ts`. Failing it is a `403`.
+`shared/src/rbac.ts`. Failing it is a `403`.
 
 ### Own-records scoping
 

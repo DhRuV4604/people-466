@@ -195,10 +195,13 @@ export function AppSidebar({
         </SidebarMenu>
       </SidebarHeader>
 
-      <SidebarContent>
+      {/* gap-0 and a tighter group padding: the default spacing pushed the last
+          group past the viewport on a laptop, and a scrollbar on five items is
+          noise. It still scrolls when it genuinely has to. */}
+      <SidebarContent className="scrollbar-thin gap-0">
         {groups.map((group) => (
-          <SidebarGroup key={group.label}>
-            <SidebarGroupLabel>{group.label}</SidebarGroupLabel>
+          <SidebarGroup key={group.label} className="py-1">
+            <SidebarGroupLabel className="h-7">{group.label}</SidebarGroupLabel>
             <SidebarMenu>
               {group.items.map((item) => {
                 // The overview owns "/" exactly; every other item also matches

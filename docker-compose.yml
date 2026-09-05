@@ -24,7 +24,7 @@ services:
   api:
     build:
       context: .
-      dockerfile: apps/api/Dockerfile
+      dockerfile: api/Dockerfile
     container_name: peoplepay360-api
     restart: unless-stopped
     depends_on:
