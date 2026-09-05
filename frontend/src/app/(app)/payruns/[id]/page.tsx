@@ -14,6 +14,7 @@ import {
   type PayrunDto,
   type PayrunStatus,
   type Paginated,
+  type PayslipDto,
 } from "@peoplepay360/shared";
 
 import { DataTable } from "@/components/data/data-table";
@@ -42,6 +43,8 @@ import { loadRefs } from "@/lib/refs";
 import { statusLabel } from "@/lib/status";
 import { requireAccess } from "@/lib/access";
 import { ALL_ROWS } from "@/lib/paged";
+import { Pagination } from "@/components/data/pagination";
+import { pageQuery } from "@/components/data/pagination-params";
 
 import {
   computePayrun,
@@ -51,7 +54,10 @@ import {
   validatePayrun,
 } from "../actions";
 
-type PageProps = { params: Promise<{ id: string }> };
+type PageProps = {
+  params: Promise<{ id: string }>;
+  searchParams: Promise<{ page?: string; pageSize?: string }>;
+};
 
 async function getPayrun(id: string): Promise<PayrunDto | null> {
   try {
@@ -104,7 +110,7 @@ async function getDeliveries(payrun: PayrunDto): Promise<Outbox> {
 
 export async function generateMetadata({
   params,
-}: PageProps): Promise<Metadata> {
+}: Pick<PageProps, "params">): Promise<Metadata> {
   const { id } = await params;
   const payrun = await getPayrun(id);
   return { title: payrun?.name ?? "Pay run" };
@@ -119,10 +125,14 @@ const STAGE: Record<PayrunStatus, string> = {
   CANCELLED: "Cancelled. Kept for the record.",
 };
 
-export default async function PayrunPage({ params }: PageProps) {
+export default async function PayrunPage({
+  params,
+  searchParams,
+}: PageProps) {
   const session = await requireAccess("payruns");
 
   const { id } = await params;
+  const query = await searchParams;
   const payrun = await getPayrun(id);
   if (!payrun) notFound();
 
@@ -314,17 +324,82 @@ export default async function PayrunPage({ params }: PageProps) {
 
       {/* "Have these gone out?" is answered whether or not they have: an
           absent panel would read as a missing panel, not as a no. */}
-      {outbox ? <PayslipDelivery outbox={outbox} /> : null}
+      <PayslipTable
+        payslips={payslips}
+        outbox={outbox}
+        page={pageQuery(query)}
+      />
+    </>
+  );
+}
 
-      <div className="flex flex-col gap-4">
+/**
+ * The run's payslips, each carrying what became of the email for it.
+ *
+ * These were two tables listing the same people twice: one of payslips, one of
+ * delivery attempts. Reading "did Priya get hers" meant finding her in both.
+ * One row per payslip answers it in a glance, and the delivery column is the
+ * only place the outbox is needed.
+ */
+function PayslipTable({
+  payslips,
+  outbox,
+  page,
+}: {
+  payslips: PayslipDto[];
+  outbox: Outbox | null;
+  page: { page: number; pageSize: number };
+}) {
+  // The newest attempt per payslip. Sending again records a fresh attempt
+  // rather than replacing the last, so the latest one is the current answer.
+  const latest = new Map<string, EmailLogDto>();
+  for (const attempt of outbox?.attempts ?? []) {
+    if (!attempt.payslipId) continue;
+    const held = latest.get(attempt.payslipId);
+    if (!held || attempt.sentAt > held.sentAt) latest.set(attempt.payslipId, attempt);
+  }
+
+  const sent = [...latest.values()].filter((a) => a.status === "SENT").length;
+  const failed = [...latest.values()].filter((a) => a.status === "FAILED").length;
+
+  const total = payslips.length;
+  const totalPages = Math.max(1, Math.ceil(total / page.pageSize));
+  // A page number past the end is a stale link, not an error: show the last.
+  const current = Math.min(page.page, totalPages);
+  const rows = payslips.slice(
+    (current - 1) * page.pageSize,
+    current * page.pageSize,
+  );
+
+  return (
+    <div className="flex flex-col gap-4">
+      <div className="flex flex-wrap items-baseline justify-between gap-2">
         <h2 className="text-lg font-semibold tracking-tight">Payslips</h2>
-        {payslips.length === 0 ? (
-          <p className="text-sm text-muted-foreground">
-            This run has not produced any payslips yet.
+        {outbox && latest.size > 0 ? (
+          <p className="text-sm text-muted-foreground tabular-nums">
+            {sent} emailed
+            {failed > 0 ? (
+              <span className="font-medium text-destructive"> · {failed} failed</span>
+            ) : null}
           </p>
-        ) : (
+        ) : null}
+      </div>
+
+      {outbox?.unavailable ? (
+        <p className="text-xs text-muted-foreground">
+          The delivery record could not be read, so the last column cannot say
+          whether these were emailed.
+        </p>
+      ) : null}
+
+      {total === 0 ? (
+        <p className="text-sm text-muted-foreground">
+          This run has not produced any payslips yet.
+        </p>
+      ) : (
+        <>
           <DataTable
-            rows={payslips}
+            rows={rows}
             getKey={(row) => row.id}
             href={(row) => `/payslips/${row.id}`}
             columns={[
@@ -379,117 +454,58 @@ export default async function PayrunPage({ params }: PageProps) {
                   </span>
                 ),
               },
+              {
+                header: "Delivery",
+                align: "right",
+                hideBelow: "md",
+                cell: (row) => {
+                  const attempt = latest.get(row.id);
+                  if (!attempt) {
+                    return (
+                      <span className="text-xs text-muted-foreground">
+                        Not sent
+                      </span>
+                    );
+                  }
+                  return (
+                    <span className="inline-flex flex-col items-end gap-0.5">
+                      <StatusBadge value={attempt.status} />
+                      <span className="text-xs whitespace-nowrap text-muted-foreground tabular-nums">
+                        {formatDate(attempt.sentAt)} · {formatTime(attempt.sentAt)}
+                      </span>
+                      {/* A failure whose reason is hidden is the reason this
+                          column exists, so the API's own text is printed. */}
+                      {attempt.error ? (
+                        <span className="max-w-56 text-xs text-destructive">
+                          {attempt.error}
+                        </span>
+                      ) : null}
+                    </span>
+                  );
+                },
+              },
             ]}
           />
-        )}
-      </div>
-    </>
-  );
-}
 
-/**
- * Who each payslip was emailed to and what came of it. Sending again records a
- * fresh attempt rather than replacing the last one, so a run can carry several
- * attempts for the same person and the newest is at the top.
- */
-function PayslipDelivery({ outbox }: { outbox: Outbox }) {
-  const { partial, unavailable } = outbox;
+          <Pagination
+            meta={{
+              total,
+              page: current,
+              pageSize: page.pageSize,
+              totalPages,
+            }}
+            noun="payslip"
+          />
+        </>
+      )}
 
-  // Sorted here rather than trusted from the API, so "most recent first" and
-  // "last attempt" stay true however the endpoint chooses to order itself.
-  const attempts = [...outbox.attempts].sort((a, b) =>
-    b.sentAt.localeCompare(a.sentAt),
-  );
-  const sent = attempts.filter((attempt) => attempt.status === "SENT").length;
-  const failed = attempts.filter(
-    (attempt) => attempt.status === "FAILED",
-  ).length;
-
-  if (attempts.length === 0) {
-    return (
-      <Section title="Payslip delivery">
-        <p className="text-sm text-muted-foreground">
-          {unavailable
-            ? "The delivery record could not be read, so whether these payslips have been emailed is not known."
-            : partial
-              ? `Nothing for this run is in the outbox, but the outbox only keeps the most recent ${OUTBOX_LIMIT} attempts across every pay run, so an earlier send may have dropped out of it.`
-              : "No payslip from this run has been emailed yet."}
-        </p>
-      </Section>
-    );
-  }
-
-  return (
-    <Section
-      title="Payslip delivery"
-      description="Every attempt to email a payslip from this run, most recent first."
-    >
-      <FactGrid columns={4}>
-        <Fact label="Attempts">{attempts.length}</Fact>
-        <Fact label="Sent">{sent}</Fact>
-        <Fact label="Failed">
-          <span
-            className={failed > 0 ? "font-medium text-destructive" : undefined}
-          >
-            {failed}
-          </span>
-        </Fact>
-        <Fact label="Last attempt">
-          {`${formatDate(attempts[0].sentAt)} · ${formatTime(attempts[0].sentAt)}`}
-        </Fact>
-      </FactGrid>
-
-      {/* The endpoint has no filter and no paging, so once it is full these
-          counts are a floor rather than the total. Saying so beats quietly
-          under-reporting a send. */}
-      {partial ? (
-        <p className="mt-4 text-xs text-muted-foreground">
-          The outbox only keeps the most recent {OUTBOX_LIMIT} attempts across
-          every pay run, so an earlier attempt for this run may be missing from
-          these figures.
+      {outbox?.partial ? (
+        <p className="text-xs text-muted-foreground">
+          The outbox holds the most recent {OUTBOX_LIMIT} attempts across every
+          pay run, so an earlier attempt for this one may be missing.
         </p>
       ) : null}
-
-      <DataTable
-        className="mt-4"
-        rows={attempts}
-        getKey={(row) => row.id}
-        columns={[
-          {
-            header: "Recipient",
-            className: "min-w-[240px]",
-            cell: (row) => (
-              <>
-                {/* An attempt with no name on it is identified by the address
-                    alone, rather than printing it twice. */}
-                <PersonCell
-                  name={row.toName ?? row.toEmail}
-                  meta={row.toName ? row.toEmail : null}
-                />
-                {/* A failure whose reason is hidden is the reason this panel
-                    exists, so the API's own text is printed on the row. */}
-                {row.error ? (
-                  <p className="mt-1 text-xs text-destructive">{row.error}</p>
-                ) : null}
-              </>
-            ),
-          },
-          {
-            header: "Attempted",
-            hideBelow: "sm",
-            cell: (row) => (
-              <span className="whitespace-nowrap tabular-nums text-muted-foreground">
-                {formatDate(row.sentAt)} · {formatTime(row.sentAt)}
-              </span>
-            ),
-          },
-          {
-            header: "Status",
-            align: "right",
-            cell: (row) => <StatusBadge value={row.status} />,
-          },
-        ]}
-      />
-    </Section>
+    </div>
   );
 }
+
