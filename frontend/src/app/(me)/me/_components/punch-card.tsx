@@ -1,7 +1,10 @@
 "use client";
 
 import * as React from "react";
-import { LogIn, LogOut } from "lucide-react";
+import { LogOut } from "lucide-react";
+
+import { AnimateIcon } from "@/components/animate-ui/icons/icon";
+import { LogIn } from "@/components/animate-ui/icons/log-in";
 import type { PunchStatusDto } from "@peoplepay360/shared";
 
 import { Button, Card, ConfirmDialog, useToast } from "@/components/ui";
@@ -12,7 +15,14 @@ import { cn } from "@/lib/utils";
 import { punchIn, punchOut } from "../actions";
 
 type Props = {
-  /** The shift still running, if there is one. */
+  /**
+   * The shift still running, if there is one.
+   *
+   * Taken from the punch status rather than derived from a list of punches:
+   * the API refuses a second check-in while any shift is open, of any date, and
+   * a month-scoped list cannot see one opened last month. The button said
+   * "Check in" and the API answered "you already have an open check-in".
+   */
   open: { checkIn: string } | null;
   /** Hours already closed out today, shown once the day is done. */
   workedToday: number;
@@ -85,12 +95,17 @@ export function PunchCard({ open, workedToday, punches }: Props) {
     <Card className="overflow-hidden">
       <div
         className={cn(
-          "flex flex-col gap-5 p-5",
-          open && "bg-gradient-to-br from-primary/10 via-transparent to-transparent",
+          // Stacked on a phone, where the button is the whole point of the
+          // screen. Side by side from sm, where a full-width primary button is
+          // several hundred pixels of purple for one click.
+          "flex flex-col gap-5 p-5 sm:flex-row sm:items-center sm:justify-between sm:gap-6",
+          // A flat tint rather than a gradient: the wash faded to nothing
+          // across the card and read as a rendering artefact more than a state.
+          open && "bg-primary/[0.04]",
         )}
       >
-        <div className="flex items-start justify-between gap-4">
-          <div>
+        <div className="flex min-w-0 flex-1 items-start justify-between gap-4 sm:justify-start sm:gap-3">
+          <div className="min-w-0">
             <p className="text-xs font-medium tracking-wide text-muted-foreground uppercase">
               Today
             </p>
@@ -121,7 +136,7 @@ export function PunchCard({ open, workedToday, punches }: Props) {
           <span
             aria-hidden
             className={cn(
-              "mt-1 size-2.5 shrink-0 rounded-full",
+              "mt-1 size-2.5 shrink-0 rounded-full sm:order-first sm:mt-2.5",
               open ? "bg-primary shadow-[0_0_0_4px] shadow-primary/20" : "bg-border",
             )}
           />
@@ -130,7 +145,7 @@ export function PunchCard({ open, workedToday, punches }: Props) {
         {/* Only worth saying when the policy allows more than one: at a cap of
             one the button state already tells the whole story. */}
         {punches.allowed > 1 && !spent ? (
-          <p className="-mt-2 text-xs text-muted-foreground">
+          <p className="-mt-2 text-xs text-muted-foreground sm:hidden">
             {pluralise(punches.remaining, "check-in")} left today of{" "}
             {punches.allowed}
           </p>
@@ -142,7 +157,7 @@ export function PunchCard({ open, workedToday, punches }: Props) {
               size="lg"
               variant="outline"
               fullWidth
-              className="h-14 rounded-2xl text-base"
+              className="h-14 rounded-2xl text-base sm:h-12 sm:w-44 sm:shrink-0"
               startIcon={<LogOut />}
               loading={pending}
               loadingText="Checking out"
@@ -167,22 +182,27 @@ export function PunchCard({ open, workedToday, punches }: Props) {
             />
           </>
         ) : (
-          <Button
-            size="lg"
-            fullWidth
-            className="h-14 rounded-2xl text-base"
-            startIcon={<LogIn />}
-            loading={pending}
-            loadingText="Checking in"
-            disabled={spent}
-            onClick={() => run(punchIn)}
-          >
-            {spent ? "Checked in already today" : "Check in"}
-          </Button>
+          // The arrow walks into the door on hover. This is the button the
+          // whole screen exists for, and the one place motion says something
+          // rather than decorating.
+          <AnimateIcon animateOnHover asChild>
+            <Button
+              size="lg"
+              fullWidth
+              className="h-14 rounded-2xl text-base sm:h-12 sm:w-44 sm:shrink-0"
+              startIcon={<LogIn />}
+              loading={pending}
+              loadingText="Checking in"
+              disabled={spent}
+              onClick={() => run(punchIn)}
+            >
+              {spent ? "Checked in already today" : "Check in"}
+            </Button>
+          </AnimateIcon>
         )}
 
         {spent ? (
-          <p className="-mt-2 text-xs text-muted-foreground">
+          <p className="-mt-2 text-xs text-muted-foreground sm:hidden">
             Your check-ins for today are used up. Ask HR if a correction is
             needed.
           </p>

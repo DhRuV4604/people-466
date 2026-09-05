@@ -47,7 +47,7 @@ export default async function MePay() {
       <h1 className="sr-only">Pay</h1>
 
       <Card className="overflow-hidden">
-        <div className="bg-gradient-to-br from-primary/10 via-transparent to-transparent p-5">
+        <div className="bg-primary/[0.04] p-5">
           <p className="text-xs font-medium tracking-wide text-muted-foreground uppercase">
             Latest · {dateRange(latest.periodStart, latest.periodEnd)}
           </p>

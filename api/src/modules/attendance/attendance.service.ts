@@ -23,7 +23,7 @@ import {
   QueryAttendanceDto,
 } from './dto/attendance.dto';
 import { NO_MATCH_ID } from '../../common/scoping';
-import type { Paginated } from '@peoplepay360/shared';
+import type { Paginated, PunchStatusDto } from '@peoplepay360/shared';
 
 /** Minutes after the scheduled start before an arrival counts as late. */
 const LATE_GRACE_MINUTES = 15;
@@ -69,19 +69,32 @@ export class AttendanceService {
   async getPunchStatus(
     employeeId: string,
     now: Date = new Date()
-  ): Promise<{ used: number; allowed: number; remaining: number; warnOnCheckOut: boolean }> {
+  ): Promise<PunchStatusDto> {
     const policy = await this.settings.get();
     const { start, end } = this.utcDay(now);
 
-    const used = await this.prisma.attendance.count({
-      where: { employeeId, checkIn: { gte: start, lt: end } },
-    });
+    const [used, open] = await this.prisma.$transaction([
+      this.prisma.attendance.count({
+        where: { employeeId, checkIn: { gte: start, lt: end } },
+      }),
+      // Deliberately unbounded by date: this is the same condition `checkIn`
+      // refuses on, so the card and the endpoint cannot disagree about whether
+      // a shift is running.
+      this.prisma.attendance.findFirst({
+        where: { employeeId, checkOut: null },
+        select: { id: true, checkIn: true },
+        orderBy: { checkIn: 'desc' },
+      }),
+    ]);
 
     return {
       used,
       allowed: policy.maxCheckInsPerDay,
       remaining: Math.max(0, policy.maxCheckInsPerDay - used),
       warnOnCheckOut: policy.warnOnCheckOut,
+      openCheckIn: open
+        ? { id: open.id, checkIn: open.checkIn.toISOString() }
+        : null,
     };
   }
 
@@ -345,12 +358,7 @@ export class AttendanceService {
    * cannot punch at all, so it reports nothing left rather than erroring: the
    * card is read-only for them either way.
    */
-  async punchStatusFor(user: AuthenticatedUser): Promise<{
-    used: number;
-    allowed: number;
-    remaining: number;
-    warnOnCheckOut: boolean;
-  }> {
+  async punchStatusFor(user: AuthenticatedUser): Promise<PunchStatusDto> {
     if (!user.employeeId) {
       const policy = await this.settings.get();
       return {
@@ -358,6 +366,7 @@ export class AttendanceService {
         allowed: policy.maxCheckInsPerDay,
         remaining: 0,
         warnOnCheckOut: policy.warnOnCheckOut,
+        openCheckIn: null,
       };
     }
     return this.getPunchStatus(user.employeeId);
