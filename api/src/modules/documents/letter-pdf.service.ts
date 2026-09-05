@@ -1,5 +1,7 @@
 import { Injectable } from '@nestjs/common';
 import PDFDocument from 'pdfkit';
+import { companyAddressLines, type CompanyDto } from '@peoplepay360/shared';
+import { CompanyService } from '../config/company.service';
 
 const BRAND = '#6d28d9';
 const INK = '#111827';
@@ -14,10 +16,12 @@ const MUTED = '#6b7280';
  */
 @Injectable()
 export class LetterPdfService {
+  constructor(private readonly company: CompanyService) {}
+
   async render(params: {
     title: string;
     body: string;
-    companyName: string;
+    company: CompanyDto;
     reference: string;
   }): Promise<Buffer> {
     const doc = new PDFDocument({ size: 'A4', margin: 56 });
@@ -28,7 +32,22 @@ export class LetterPdfService {
       doc.on('end', () => resolve(Buffer.concat(chunks)));
     });
 
-    doc.fillColor(BRAND).fontSize(11).font('Helvetica-Bold').text(params.companyName);
+    // A letterhead: the mark, the name, then where the company actually is.
+    const logo = await this.company.logoBuffer();
+    if (logo) {
+      try {
+        doc.image(logo, 56, 48, { fit: [40, 40] });
+        doc.y = 96;
+      } catch {
+        // Not worth failing a letter over an undecodable image.
+      }
+    }
+
+    doc.fillColor(BRAND).fontSize(11).font('Helvetica-Bold').text(params.company.name);
+    const address = companyAddressLines(params.company);
+    if (address.length > 0) {
+      doc.fillColor(MUTED).fontSize(9).font('Helvetica').text(address.join(', '));
+    }
     doc
       .fillColor(MUTED)
       .fontSize(9)

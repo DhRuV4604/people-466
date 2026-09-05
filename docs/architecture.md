@@ -142,6 +142,25 @@ body carrying unknown fields is rejected outright rather than stripped.
 
 A screen composes; it does not define new primitives. See [frontend.md](frontend.md).
 
+## Uploaded files
+
+Written to a mounted volume and described by a row in `StoredFile`. Two rules
+do most of the work.
+
+**The key is generated, never taken from the upload.** A filename is client
+input, and `../` in one turns a writable directory into the filesystem.
+
+**The declared content type is checked against the first bytes.** That type
+also comes from the client and is worth what the client is worth; sniffing
+catches a PDF renamed to `.png`, and a truncated image that would store happily
+and then fail to decode in every browser later asked to show it.
+
+Bytes are streamed back through a permission check rather than served from a
+static mount — the check is the only thing between someone's passport scan and
+the internet. Nothing is overwritten: a new picture, or a new logo, is a new
+file with a new id, which is also what makes a replaced image appear
+immediately instead of showing the one the browser cached.
+
 ## Where AI runs
 
 Outside everything else, on purpose.

@@ -1,7 +1,9 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
 import PDFDocument from 'pdfkit';
 import { isNegativeCategory, CATEGORY_LABELS } from '@peoplepay360/shared';
+import { companyAddressLines } from '@peoplepay360/shared';
 import { PrismaService } from '../../prisma/prisma.service';
+import { CompanyService } from '../config/company.service';
 import { toNumber } from '../../common/decimal';
 
 const BRAND = '#6d28d9';
@@ -28,7 +30,9 @@ function maskAccount(account: string): string {
 
 @Injectable()
 export class PdfService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(private readonly prisma: PrismaService,
+    private readonly company: CompanyService
+  ) {}
 
   /** Render a payslip to a PDF buffer for download or as an email attachment. */
   async generatePayslip(payslipId: string): Promise<{ buffer: Buffer; filename: string }> {
@@ -57,9 +61,37 @@ export class PdfService {
     const emp = payslip.employee;
 
     // ---- Header band
+    const company = await this.company.get();
+    const logo = await this.company.logoBuffer();
+
     doc.rect(0, 0, doc.page.width, 96).fill(BRAND);
-    doc.fillColor('#ffffff').fontSize(22).font('Helvetica-Bold').text('PeoplePay360', 48, 30);
-    doc.fontSize(9).font('Helvetica').text('HR & Payroll Operations', 48, 58);
+
+    // The logo displaces the name rather than sitting beside it: two marks of
+    // identity in one corner reads as a mistake.
+    let textLeft = 48;
+    if (logo) {
+      try {
+        doc.image(logo, 48, 26, { fit: [44, 44], valign: 'center' });
+        textLeft = 104;
+      } catch {
+        // An image pdfkit cannot decode is not a reason to fail a payslip.
+      }
+    }
+
+    doc
+      .fillColor('#ffffff')
+      .fontSize(logo ? 18 : 22)
+      .font('Helvetica-Bold')
+      .text(company.name, textLeft, logo ? 34 : 30, { width: 300, lineBreak: false });
+    doc
+      .fontSize(9)
+      .font('Helvetica')
+      .text(
+        companyAddressLines(company).join(' · ') || 'HR & Payroll Operations',
+        textLeft,
+        logo ? 58 : 58,
+        { width: 300, lineBreak: false }
+      );
     doc
       .fontSize(15)
       .font('Helvetica-Bold')

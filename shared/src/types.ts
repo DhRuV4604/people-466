@@ -143,6 +143,8 @@ export interface PunchStatusDto {
 // ---------------------------------------------------------------- Employees
 
 export interface EmployeeSummaryDto {
+  /** Set when they have a profile picture; the bytes come from the API. */
+  avatarFileId?: string | null;
   id: string;
   employeeCode: string;
   firstName: string;
@@ -187,6 +189,7 @@ export interface EmployeeDetailDto extends EmployeeSummaryDto {
     leaveRequests: number;
     leaveAllocations: number;
     payslips: number;
+    documents: number;
   };
   /**
    * Only on the create response, and only when the invite did not go out.
@@ -601,4 +604,60 @@ export interface DocumentSignatureDto {
   signerUserAgent: string | null;
   signedChecksum: string | null;
   signedAt: ISODate | null;
+}
+
+// ---------------------------------------------------------------- The company
+
+/**
+ * Who this install is.
+ *
+ * Read by anyone signed in, because a payslip and a letter both need it and
+ * both are read by the person they are about. Only an admin may change it.
+ */
+export interface CompanyDto {
+  name: string;
+  legalName: string | null;
+  addressLine1: string | null;
+  addressLine2: string | null;
+  city: string | null;
+  state: string | null;
+  postalCode: string | null;
+  country: string | null;
+  email: string | null;
+  phone: string | null;
+  website: string | null;
+  taxId: string | null;
+  /** Id of the stored logo, or null. The bytes come from `/company/logo`. */
+  logoFileId: string | null;
+}
+
+export const DEFAULT_COMPANY: CompanyDto = {
+  name: "PeoplePay360",
+  legalName: null,
+  addressLine1: null,
+  addressLine2: null,
+  city: null,
+  state: null,
+  postalCode: null,
+  country: null,
+  email: null,
+  phone: null,
+  website: null,
+  taxId: null,
+  logoFileId: null,
+};
+
+/**
+ * The address as a document would print it: the lines that were filled in, in
+ * postal order, with nothing left showing where a field was skipped.
+ */
+export function companyAddressLines(company: CompanyDto): string[] {
+  return [
+    company.addressLine1,
+    company.addressLine2,
+    [company.city, company.state].filter(Boolean).join(", "),
+    [company.postalCode, company.country].filter(Boolean).join(" "),
+  ]
+    .map((line) => (line ?? "").trim())
+    .filter(Boolean);
 }

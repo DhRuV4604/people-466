@@ -1,6 +1,11 @@
-import { Injectable, NotFoundException, BadRequestException } from '@nestjs/common';
+import {
+  Injectable,
+  NotFoundException,
+  BadRequestException,
+  ForbiddenException,
+} from '@nestjs/common';
 import { Prisma } from '@prisma/client';
-import { scopeToOwnRecords } from '@peoplepay360/shared';
+import { can, scopeToOwnRecords } from '@peoplepay360/shared';
 import type {
   EmployeeSummaryDto,
   EmployeeDetailDto,
@@ -14,6 +19,10 @@ import { AuthService } from '../auth/auth.service';
 import { MailService } from '../payroll/mail.service';
 import { pageArgs, paginated } from '../../common/pagination';
 import { NotificationsService } from '../notifications/notifications.service';
+import {
+  StorageService,
+  type UploadedFile as UploadedFileLike,
+} from '../files/storage.service';
 import type { AuthenticatedUser } from '../auth/auth.types';
 import { CreateEmployeeDto, UpdateEmployeeDto, QueryEmployeesDto } from './dto/employee.dto';
 import { NO_MATCH_ID } from '../../common/scoping';
@@ -27,13 +36,17 @@ const SUMMARY_INCLUDE = {
 
 type EmployeeSummaryRow = Prisma.EmployeeGetPayload<{ include: typeof SUMMARY_INCLUDE }>;
 
+/** What a profile picture may be. Anything else is a file, not a face. */
+const AVATAR_TYPES = new Set(['image/png', 'image/jpeg', 'image/webp']);
+
 @Injectable()
 export class EmployeesService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly notifications: NotificationsService,
     private readonly mail: MailService,
-    private readonly config: ConfigService
+    private readonly config: ConfigService,
+    private readonly storage: StorageService
   ) {}
 
   private toSummary(e: EmployeeSummaryRow): EmployeeSummaryDto {
@@ -46,6 +59,7 @@ export class EmployeesService {
       workEmail: e.workEmail,
       employeeType: e.employeeType,
       status: e.status,
+      avatarFileId: e.avatarId,
       department: e.department ? { id: e.department.id, name: e.department.name } : null,
       jobPosition: e.jobPosition ? { id: e.jobPosition.id, name: e.jobPosition.name } : null,
       manager: e.manager
@@ -150,6 +164,7 @@ export class EmployeesService {
             leaveRequests: true,
             leaveAllocations: true,
             payslips: true,
+            documents: true,
           },
         },
       },
@@ -175,6 +190,7 @@ export class EmployeesService {
         leaveRequests: employee._count.leaveRequests,
         leaveAllocations: employee._count.leaveAllocations,
         payslips: employee._count.payslips,
+        documents: employee._count.documents,
       },
     };
   }
@@ -376,6 +392,47 @@ export class EmployeesService {
    * and on an install with no mail configured, until someone else intervenes.
    * Changing your own password is what `/auth/change-password` is for.
    */
+  /**
+   * Sets a profile picture.
+   *
+   * Anyone may set their own; changing someone else's needs the same grant as
+   * editing them. The old file is left on disk: nothing else points at it, but
+   * deleting bytes on a path this hot is how a missing avatar becomes a 500.
+   */
+  async setAvatar(
+    id: string,
+    file: UploadedFileLike | undefined,
+    user: AuthenticatedUser
+  ): Promise<{ avatarFileId: string }> {
+    if (!file) throw new BadRequestException('Choose an image.');
+    if (!AVATAR_TYPES.has(file.mimetype)) {
+      throw new BadRequestException('A profile picture has to be a PNG, JPEG or WebP.');
+    }
+    if (user.employeeId !== id && !can(user.role, 'employees', 'update')) {
+      throw new ForbiddenException('You can only change your own picture.');
+    }
+
+    const stored = await this.storage.save(file, user.userId, 'avatars');
+    await this.prisma.employee.update({
+      where: { id },
+      data: { avatarId: stored.id },
+    });
+    return { avatarFileId: stored.id };
+  }
+
+  /** The avatar's file id, for whoever is allowed to see the employee. */
+  async avatarFileId(id: string, user: AuthenticatedUser): Promise<string> {
+    if (scopeToOwnRecords(user.role) && user.employeeId !== id) {
+      throw new NotFoundException('Employee not found.');
+    }
+    const row = await this.prisma.employee.findUnique({
+      where: { id },
+      select: { avatarId: true },
+    });
+    if (!row?.avatarId) throw new NotFoundException('No picture has been set.');
+    return row.avatarId;
+  }
+
   async reinvite(
     id: string,
     user: AuthenticatedUser

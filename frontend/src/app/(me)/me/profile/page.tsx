@@ -11,6 +11,7 @@ import {
 
 import { StatusBadge } from "@/components/data/status-badge";
 import { Badge, Button, Card, UserAvatar, buttonVariants } from "@/components/ui";
+import { AvatarPicker } from "@/components/employees/avatar-picker";
 import { ApiError, apiFetch } from "@/lib/api-client";
 import { landingFor, requireMe } from "@/lib/access";
 import { emptyPage } from "@/lib/paged";
@@ -64,7 +65,15 @@ export default async function MeProfile() {
   return (
     <>
       <Card className="flex flex-col items-center gap-3 p-6 text-center">
-        <UserAvatar name={user.name} size="lg" />
+        {employee ? (
+          <AvatarPicker
+            employeeId={employee.id}
+            name={user.name}
+            avatarFileId={employee.avatarFileId}
+          />
+        ) : (
+          <UserAvatar name={user.name} size="lg" />
+        )}
         <div>
           <h1 className="text-xl font-semibold tracking-tight">{user.name}</h1>
           <p className="text-sm text-muted-foreground">

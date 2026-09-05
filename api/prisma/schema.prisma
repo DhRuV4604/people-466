@@ -723,6 +723,31 @@ model AppSettings {
   /// the last one available.
   warnOnCheckOut Boolean @default(true)
 
+  // ------------------------------------------------------------- The company
+  //
+  // Who this install is. It goes on payslips, on generated letters and in the
+  // invite emails, so it lives here rather than in each of them: a company
+  // that renames itself should not have to be renamed in five places.
+
+  /// Trading name. What appears on a payslip header.
+  companyName    String  @default("PeoplePay360")
+  /// Registered name, where it differs. Printed on formal documents.
+  companyLegalName String?
+  addressLine1   String?
+  addressLine2   String?
+  city           String?
+  state          String?
+  postalCode     String?
+  country        String?
+  companyEmail   String?
+  companyPhone   String?
+  website        String?
+  /// GSTIN, PAN, or whatever the jurisdiction calls it. Free text on purpose.
+  taxId          String?
+
+  logoFileId String?     @db.Uuid
+  logo       StoredFile? @relation("CompanyLogo", fields: [logoFileId], references: [id])
+
   updatedAt DateTime @updatedAt
 }
 
@@ -750,9 +775,10 @@ model StoredFile {
   uploadedById String @db.Uuid
   uploadedBy   User   @relation("FileUploader", fields: [uploadedById], references: [id])
 
-  documentOriginals Document[] @relation("DocumentFile")
-  documentSigned    Document[] @relation("DocumentSignedFile")
-  employeeAvatars   Employee[] @relation("EmployeeAvatar")
+  documentOriginals Document[]    @relation("DocumentFile")
+  documentSigned    Document[]    @relation("DocumentSignedFile")
+  employeeAvatars   Employee[]    @relation("EmployeeAvatar")
+  companyLogos      AppSettings[] @relation("CompanyLogo")
 
   createdAt DateTime @default(now())
 }

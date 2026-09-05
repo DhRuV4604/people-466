@@ -34,6 +34,7 @@ export function employeeTabAccess(role: AuthUser["role"]) {
     timeOff: can(role, "timeOffRequests", "read"),
     contracts: can(role, "contracts", "read"),
     payslips: can(role, "payslips", "read"),
+    documents: can(role, "documents", "read"),
   };
 }
 

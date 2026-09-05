@@ -29,7 +29,13 @@ export function EmployeeTabs({
       aria-label="Employee record"
       // A narrow screen scrolls the strip sideways rather than wrapping it
       // onto a second row that pushes the content down the page.
-      className="-mx-1 flex gap-1 overflow-x-auto border-b border-border px-1"
+      //
+      // overflow-y is pinned because the CSS spec turns it from `visible` into
+      // `auto` the moment the other axis is not visible - and the -mb-px that
+      // laps each tab over the bottom border makes the content one pixel
+      // taller than the box, which was enough to raise a vertical scrollbar.
+      // The clipped pixel is that overlap, which lands on this border anyway.
+      className="-mx-1 flex gap-1 overflow-x-auto overflow-y-hidden border-b border-border px-1 scrollbar-thin"
     >
       {tabs.map((tab) => {
         // The overview is the base path, so a prefix test would match it on

@@ -19,6 +19,30 @@ const ALLOWED: Record<string, string> = {
 /** 20 MB. Large enough for a scanned contract, small enough to refuse a video. */
 const MAX_BYTES = 20 * 1024 * 1024;
 
+/**
+ * What each accepted type actually starts with.
+ *
+ * The declared content type comes from the client and is worth exactly what
+ * the client is worth. Checking the first bytes catches two things: a PDF
+ * renamed to .png, and a truncated or corrupt image that would store happily
+ * and then fail to decode in every browser that was later asked to show it.
+ */
+const SIGNATURES: Record<string, (head: Buffer) => boolean> = {
+  'application/pdf': (h) => h.subarray(0, 5).toString('latin1') === '%PDF-',
+  'image/png': (h) =>
+    h.subarray(0, 8).equals(Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a])),
+  'image/jpeg': (h) => h[0] === 0xff && h[1] === 0xd8 && h[2] === 0xff,
+  'image/webp': (h) =>
+    h.subarray(0, 4).toString('latin1') === 'RIFF' &&
+    h.subarray(8, 12).toString('latin1') === 'WEBP',
+  // The Office formats are ZIP containers, and the older .doc is a compound
+  // file. Both are checked only far enough to reject something obviously else.
+  'application/msword': (h) =>
+    h.subarray(0, 8).equals(Buffer.from([0xd0, 0xcf, 0x11, 0xe0, 0xa1, 0xb1, 0x1a, 0xe1])),
+  'application/vnd.openxmlformats-officedocument.wordprocessingml.document': (h) =>
+    h[0] === 0x50 && h[1] === 0x4b,
+};
+
 export interface UploadedFile {
   originalname: string;
   mimetype: string;
@@ -68,6 +92,14 @@ export class StorageService {
     if (!file.buffer?.length) {
       throw new BadRequestException('That file is empty.');
     }
+
+    const looksRight = SIGNATURES[file.mimetype];
+    if (looksRight && !looksRight(file.buffer.subarray(0, 16))) {
+      throw new BadRequestException(
+        `That file does not look like a ${extension.slice(1).toUpperCase()}. It may be damaged, or renamed from something else.`
+      );
+    }
+
     return extension;
   }
 

@@ -1,7 +1,14 @@
 import type { Metadata } from "next";
-import { DEFAULT_APP_SETTINGS, ROLE_LABELS, can } from "@peoplepay360/shared";
+import {
+  DEFAULT_APP_SETTINGS,
+  DEFAULT_COMPANY,
+  ROLE_LABELS,
+  can,
+  companyAddressLines,
+} from "@peoplepay360/shared";
 import type {
   AppSettingsDto,
+  CompanyDto,
   DepartmentDto,
   JobPositionDto,
   Role,
@@ -32,18 +39,21 @@ import { Pagination } from "@/components/data/pagination";
 import { pageQuery } from "@/components/data/pagination-params";
 
 import { EditScheduleButton } from "./_components/edit-schedule-button";
+import { LogoPicker } from "./_components/logo-picker";
 import { ScheduleLinesField } from "./_components/schedule-lines-field";
 import {
   deleteDepartment,
   deletePosition,
   deleteSchedule,
   saveAttendancePolicy,
+  saveCompany,
   saveDepartment,
   savePosition,
   saveSchedule,
 } from "./actions";
 import {
   attendancePolicyFields,
+  companyFields,
   departmentFields,
   positionFields,
   scheduleFields,
@@ -52,7 +62,7 @@ import {
 export const metadata: Metadata = {
   title: "Settings",
   description:
-    "Departments, positions, schedules and the attendance policy.",
+    "The company, its departments, positions, schedules and attendance policy.",
 };
 
 type SearchParams = Promise<Record<string, string | undefined>>;
@@ -77,7 +87,7 @@ export default async function SettingsPage({
 
   // Four independent tables on one screen, so each carries its own page in the
   // URL and paging one leaves the others where they were.
-  const [deptPage, posPage, schedulePage, policy, refs] =
+  const [deptPage, posPage, schedulePage, policy, company, refs] =
     await Promise.all([
       soft(
         apiFetch<Paginated<DepartmentDto>>("/departments", {
@@ -102,8 +112,13 @@ export default async function SettingsPage({
       soft(apiFetch<AppSettingsDto>("/app-settings"), {
         ...DEFAULT_APP_SETTINGS,
       }),
+      // Same reasoning: an install that has never saved this still has a name
+      // to show, because the API answers with the default.
+      soft(apiFetch<CompanyDto>("/company"), { ...DEFAULT_COMPANY }),
       loadRefs(["employees"]),
     ]);
+
+  const addressLines = companyAddressLines(company);
 
   const departments = deptPage.items;
   const positions = posPage.items;
@@ -229,7 +244,9 @@ export default async function SettingsPage({
         ? "schedules"
         : params.tab === "attendance"
           ? "attendance"
-          : "departments";
+          : params.tab === "company"
+            ? "company"
+            : "departments";
 
   return (
     <Tabs defaultValue={tab} className="w-full">
@@ -238,6 +255,7 @@ export default async function SettingsPage({
         <TabsTrigger value="positions">Job positions</TabsTrigger>
         <TabsTrigger value="schedules">Schedules</TabsTrigger>
         <TabsTrigger value="attendance">Attendance</TabsTrigger>
+        <TabsTrigger value="company">Company</TabsTrigger>
       </TabsList>
 
       <TabsContents className="mt-4">
@@ -459,6 +477,60 @@ export default async function SettingsPage({
                 {policy.warnOnCheckOut ? "Yes" : "No"}
               </Fact>
             </dl>
+          </Section>
+        </TabsContent>
+
+        <TabsContent value="company">
+          <Section
+            title="Company"
+            description="Who this install is. It goes on payslip headers, on generated letters and in the emails that invite people to sign in."
+            action={
+              canUpdatePolicy ? (
+                <RecordDialog
+                  title="Company details"
+                  description="Only the name is required. Emptying a box clears that line."
+                  fields={companyFields()}
+                  action={saveCompany}
+                  record={{ ...company }}
+                  submitLabel="Save details"
+                  trigger={
+                    <Button variant="outline" startIcon={<Pencil />}>
+                      Edit details
+                    </Button>
+                  }
+                />
+              ) : null
+            }
+          >
+            <div className="flex flex-col gap-6">
+              {canUpdatePolicy ? (
+                <LogoPicker logoFileId={company.logoFileId} />
+              ) : null}
+
+              <dl className="grid gap-6 sm:grid-cols-2 lg:grid-cols-3">
+                <Fact label="Name">{company.name}</Fact>
+                <Fact label="Registered name">
+                  {company.legalName ?? "—"}
+                </Fact>
+                <Fact label="Tax ID">{company.taxId ?? "—"}</Fact>
+                <Fact label="Address">
+                  {addressLines.length > 0 ? (
+                    <span className="block">
+                      {addressLines.map((line) => (
+                        <span key={line} className="block">
+                          {line}
+                        </span>
+                      ))}
+                    </span>
+                  ) : (
+                    "—"
+                  )}
+                </Fact>
+                <Fact label="Email">{company.email ?? "—"}</Fact>
+                <Fact label="Phone">{company.phone ?? "—"}</Fact>
+                <Fact label="Website">{company.website ?? "—"}</Fact>
+              </dl>
+            </div>
           </Section>
         </TabsContent>
 

@@ -14,6 +14,8 @@ import {
 } from "lucide-react";
 import { can } from "@peoplepay360/shared";
 
+import { AvatarPicker } from "@/components/employees/avatar-picker";
+import { avatarUrl } from "@/lib/avatar";
 import { BreadcrumbTitle } from "@/components/app/breadcrumb-title";
 import { ActionButton, RecordDialog } from "@/components/form";
 import {
@@ -143,6 +145,15 @@ export default async function EmployeeLayout({ children, params }: LayoutProps) 
           },
         ]
       : []),
+    ...(access.documents
+      ? [
+          {
+            href: `${base}/documents`,
+            label: "Documents",
+            count: employee.counts.documents,
+          },
+        ]
+      : []),
   ];
 
   const details = [
@@ -216,7 +227,19 @@ export default async function EmployeeLayout({ children, params }: LayoutProps) 
             correction is never filed against a half-remembered name. */}
         <Card className="lg:sticky lg:top-6">
           <CardHeader className="items-start gap-4">
-            <UserAvatar name={employee.fullName} size="lg" />
+            {canUpdate ? (
+              <AvatarPicker
+                employeeId={employee.id}
+                name={employee.fullName}
+                avatarFileId={employee.avatarFileId}
+              />
+            ) : (
+              <UserAvatar
+                name={employee.fullName}
+                size="lg"
+                src={avatarUrl(employee.id, employee.avatarFileId)}
+              />
+            )}
             <div className="min-w-0">
               <CardTitle>{employee.fullName}</CardTitle>
               <CardDescription className="font-mono text-xs">

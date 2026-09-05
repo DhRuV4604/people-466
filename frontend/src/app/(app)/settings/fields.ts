@@ -88,3 +88,40 @@ export function attendancePolicyFields(): FieldSpec[] {
     },
   ];
 }
+
+/**
+ * Who the company is.
+ *
+ * Only the name is required: an install has to have something to print on a
+ * payslip header, and everything else is a detail a particular company may not
+ * have or may not want on its letters.
+ */
+export function companyFields(): FieldSpec[] {
+  return [
+    {
+      name: "name",
+      label: "Name",
+      required: true,
+      hint: "What goes on payslip headers, letters and invite emails.",
+    },
+    {
+      name: "legalName",
+      label: "Registered name",
+      hint: "Where it differs from the trading name. Printed on formal documents.",
+    },
+    { name: "addressLine1", label: "Address" },
+    { name: "addressLine2", label: "Address, continued" },
+    { name: "city", label: "City" },
+    { name: "state", label: "State" },
+    { name: "postalCode", label: "Postcode" },
+    { name: "country", label: "Country" },
+    { name: "email", label: "Email", type: "email" },
+    { name: "phone", label: "Phone" },
+    { name: "website", label: "Website" },
+    {
+      name: "taxId",
+      label: "Tax ID",
+      hint: "GSTIN, PAN, or whatever your jurisdiction calls it.",
+    },
+  ];
+}

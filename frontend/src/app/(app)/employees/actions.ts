@@ -1,8 +1,11 @@
 "use server";
 
+import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 
 import type { EmployeeDetailDto } from "@peoplepay360/shared";
+
+import { ApiError, apiUpload } from "@/lib/api-client";
 
 import {
   callAction,
@@ -96,4 +99,26 @@ export async function reinviteEmployee(id: string): Promise<FormState> {
       secretLabel: "One-time password — give it to them yourself",
     },
   };
+}
+
+/**
+ * Sets a profile picture.
+ *
+ * Anyone may set their own; the API decides, because "my own" is not something
+ * the permission matrix can express.
+ */
+export async function uploadAvatar(
+  employeeId: string,
+  body: FormData,
+): Promise<FormState> {
+  try {
+    await apiUpload(`/employees/${employeeId}/avatar`, body);
+    // The picture appears in the sidebar and on every list, so the whole tree
+    // re-renders rather than the screen it was set from.
+    revalidatePath("/", "layout");
+    return { ok: true, message: "Picture updated." };
+  } catch (error) {
+    if (error instanceof ApiError) return { error: error.message };
+    throw error;
+  }
 }

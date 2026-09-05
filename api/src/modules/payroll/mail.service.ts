@@ -10,6 +10,7 @@ import {
 } from '../../common/pagination';
 import { toNumber } from '../../common/decimal';
 import { PdfService } from './pdf.service';
+import { CompanyService } from '../config/company.service';
 
 export interface SendResult {
   sent: number;
@@ -49,7 +50,8 @@ export class MailService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly pdf: PdfService,
-    private readonly config: ConfigService
+    private readonly config: ConfigService,
+    private readonly company: CompanyService
   ) {}
 
   /**
@@ -83,6 +85,7 @@ export class MailService {
     periodEnd: Date;
     netPay: number;
     payslipNumber: string;
+    companyName: string;
   }): string {
     return [
       `Dear ${params.employeeName},`,
@@ -95,7 +98,7 @@ export class MailService {
       'If any detail looks incorrect, please contact the payroll team.',
       '',
       'Regards,',
-      'Payroll Team - PeoplePay360',
+      `Payroll Team - ${params.companyName}`,
     ].join('\n');
   }
 
@@ -107,6 +110,7 @@ export class MailService {
     if (!payrun) throw new NotFoundException('Pay run not found.');
 
     const result: SendResult = { sent: 0, failed: 0, queued: 0 };
+    const companyName = (await this.company.get()).name;
 
     for (const payslip of payrun.payslips) {
       const employee = payslip.employee;
@@ -118,6 +122,7 @@ export class MailService {
         periodEnd: payslip.periodEnd,
         netPay: toNumber(payslip.netPay),
         payslipNumber: payslip.number,
+        companyName,
       });
 
       try {
@@ -192,11 +197,12 @@ export class MailService {
     password: string;
     signInUrl: string;
   }): Promise<{ delivered: boolean; error?: string }> {
-    const subject = 'Your PeoplePay360 account';
+    const companyName = (await this.company.get()).name;
+    const subject = `Your ${companyName} account`;
     const body = [
       `Hello ${params.name},`,
       '',
-      'An account has been created for you on PeoplePay360, where you can check',
+      `An account has been created for you on ${companyName}, where you can check`,
       'in and out, request leave and read your payslips.',
       '',
       `Sign in at: ${params.signInUrl}`,

@@ -109,6 +109,8 @@ the API has finished migrating.
 | `PATCH` | `/employees/:id` | `employees:update` |
 | `DELETE` | `/employees/:id` | `employees:delete` |
 | `POST` | `/employees/:id/reinvite` | `employees:update` |
+| `GET` | `/employees/:id/avatar` | `employees:read` |
+| `POST` | `/employees/:id/avatar` | `employees:read` |
 
 Query: `q`, `departmentId`, `employeeType`, `status`, `missingBank`.
 The list returns `EmployeeSummaryDto`; the single record returns `EmployeeDetailDto`, which adds
@@ -133,8 +135,40 @@ migration created for employees that predated it. It returns `{ delivered, error
 oneTimePassword? }` rather than throwing, on the same terms as create: a send that fails still
 leaves a usable account, a row saying why, and the password in the response.
 
+A profile picture is read with `employees:read`, which the Employee role holds
+for itself alone, so a person sees their own and HR sees everyone's. Setting
+one is guarded on the record rather than the matrix: anyone may set their own,
+and changing someone else's needs `employees:update`.
+
 `DELETE` removes the account with the employee. Where payslips exist, both are deactivated
 instead, so payroll history keeps the person it belongs to.
+
+### The company
+
+| Method | Path | Permission |
+|---|---|---|
+| `GET` | `/company` | signed in |
+| `GET` | `/company/logo` | signed in |
+| `PATCH` | `/company` | `workingSchedules:update` |
+| `POST` | `/company/logo` | `workingSchedules:update` |
+| `DELETE` | `/company/logo` | `workingSchedules:update` |
+
+Name, address, contact details, tax id and logo — one answer per install, held
+on the same pinned row as the rest of the organisation's settings.
+
+**Reading it needs no permission beyond being signed in.** The company's own
+name is on the payslip of the person reading it, and gating that behind an
+admin grant would leave the header of their own payslip blank. Writing is the
+same grant that guards the other organisation-wide settings.
+
+`PATCH` merges: an omitted field is left alone, and a field sent as an empty
+string is cleared, which is what a form means when a box is emptied. Only
+`name` is required, and an install that has never saved still reads back a
+default rather than nothing.
+
+Replacing the logo stores a new file and points at it; the old one is left
+alone, because a payslip generated last month referred to it and reprinting it
+should not produce a document with a hole where the letterhead was.
 
 ### Documents
 

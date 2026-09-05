@@ -39,6 +39,15 @@ describes and the rules the services enforce on top of it.
   the account with it. Payslips do not cascade, which is why the API deactivates both instead of
   deleting once payroll history exists.
 
+## One row for the organisation
+
+`AppSettings` is pinned to a single id. It holds the attendance policy and who
+the company is — name, address, contact details, tax id and a logo — because
+both are the same kind of thing: one answer per install, read from everywhere.
+Every read goes through a service that falls back to documented defaults, so an
+install that has never opened the settings screen still prints a company name
+on a payslip instead of a blank header.
+
 ## Ids, money and time
 
 | Concern | Choice | Why |

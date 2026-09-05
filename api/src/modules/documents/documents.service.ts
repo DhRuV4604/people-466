@@ -10,7 +10,11 @@ import type {
   DocumentSignatureDto,
   Paginated,
 } from '@peoplepay360/shared';
-import { DOCUMENT_KINDS, scopeToOwnRecords } from '@peoplepay360/shared';
+import {
+  DOCUMENT_KINDS,
+  companyAddressLines,
+  scopeToOwnRecords,
+} from '@peoplepay360/shared';
 import { PrismaService } from '../../prisma/prisma.service';
 import { pageArgs, paginated } from '../../common/pagination';
 import { NotificationsService } from '../notifications/notifications.service';
@@ -18,6 +22,7 @@ import { StorageService, type UploadedFile } from '../files/storage.service';
 import { SigningService } from '../files/signing.service';
 import { AiService } from '../ai/ai.service';
 import { LetterPdfService } from './letter-pdf.service';
+import { CompanyService } from '../config/company.service';
 import type { AuthenticatedUser } from '../auth/auth.types';
 import type {
   CreateDocumentDto,
@@ -56,7 +61,8 @@ export class DocumentsService {
     private readonly signing: SigningService,
     private readonly notifications: NotificationsService,
     private readonly ai: AiService,
-    private readonly letters: LetterPdfService
+    private readonly letters: LetterPdfService,
+    private readonly company: CompanyService
   ) {}
 
   private toDto(row: DocumentRow): DocumentDto {
@@ -244,6 +250,7 @@ export class DocumentsService {
     });
     if (!employee) throw new NotFoundException('Employee not found.');
 
+    const company = await this.company.get();
     const written = await this.ai.draft({
       kind: dto.kind,
       // Only the facts a letter needs. Bank details and date of birth are in
@@ -256,7 +263,11 @@ export class DocumentsService {
         employmentType: employee.employeeType,
         hireDate: employee.hireDate.toISOString().slice(0, 10),
       },
-      company: { name: 'PeoplePay360' },
+      company: {
+        name: company.name,
+        legalName: company.legalName,
+        address: companyAddressLines(company).join(', ') || null,
+      },
       notes: dto.notes,
     });
 
@@ -264,7 +275,7 @@ export class DocumentsService {
     const pdf = await this.letters.render({
       title,
       body: written.body,
-      companyName: 'PeoplePay360',
+      company,
       reference: employee.employeeCode,
     });
 

@@ -11,6 +11,7 @@ import type { EmployeeSummaryDto } from "@peoplepay360/shared";
 
 import { RowActions } from "@/components/form";
 import { Badge, Card, Tooltip, TooltipContent, TooltipTrigger, UserAvatar } from "@/components/ui";
+import { avatarUrl } from "@/lib/avatar";
 import {
   EMPLOYEE_STATUS_LABELS,
   EMPLOYEE_STATUS_TONE,
@@ -142,7 +143,10 @@ export function EmployeeList({
             <span className="sr-only">Open {employee.fullName}</span>
           </Link>
 
-          <UserAvatar name={employee.fullName} />
+          <UserAvatar
+            name={employee.fullName}
+            src={avatarUrl(employee.id, employee.avatarFileId)}
+          />
 
           <div className="min-w-0 flex-1">
             <p className="truncate text-sm font-medium">{employee.fullName}</p>
@@ -203,7 +207,11 @@ export function EmployeeCards({
 
             <div className="flex h-full flex-col gap-4 p-5">
               <div className="flex items-start gap-3">
-                <UserAvatar name={employee.fullName} size="lg" />
+                <UserAvatar
+                  name={employee.fullName}
+                  size="lg"
+                  src={avatarUrl(employee.id, employee.avatarFileId)}
+                />
                 <div className="min-w-0 flex-1">
                   <p className="truncate font-medium">{employee.fullName}</p>
                   <p className="truncate text-sm text-muted-foreground">

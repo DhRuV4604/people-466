@@ -10,12 +10,13 @@ import {
   PayslipsController,
   SalaryConfigController,
 } from './payroll.controller';
+import { ConfigDataModule } from '../config/config-data.module';
 import { ContractsModule } from '../contracts/contracts.module';
 import { AttendanceModule } from '../attendance/attendance.module';
 import { TimeOffModule } from '../time-off/time-off.module';
 
 @Module({
-  imports: [ContractsModule, AttendanceModule, TimeOffModule],
+  imports: [ContractsModule, AttendanceModule, TimeOffModule, ConfigDataModule],
   controllers: [PayrunsController, PayslipsController, SalaryConfigController],
   providers: [
     PayrollEngineService,
