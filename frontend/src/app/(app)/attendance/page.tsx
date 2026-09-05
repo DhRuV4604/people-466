@@ -270,41 +270,42 @@ export default async function AttendancePage({
         count={{ total: recordPage.total, noun: "record" }}
         actions={
           canCreate ? (
-            <>
-              {canPunch ? (
-                <>
-                  <ActionButton
-                    action={checkIn}
-                    variant="outline"
-                    size="md"
-                    startIcon={<LogIn />}
-                    pendingLabel="Checking in"
-                  >
-                    Check in
-                  </ActionButton>
-                  <ActionButton
-                    action={checkOut}
-                    variant="outline"
-                    size="sm"
-                    startIcon={<LogOut />}
-                    pendingLabel="Checking out"
-                  >
-                    Check out
-                  </ActionButton>
-                </>
-              ) : null}
-
-              <RecordDialog
-                title="Record attendance"
-                description="For a shift the clock missed. Leave the check-out blank if the shift is still running."
-                fields={attendanceFields(refs)}
-                action={saveAttendance}
-                submitLabel="Record attendance"
-              />
-            </>
+            <RecordDialog
+              title="Record attendance"
+              description="For a shift the clock missed. Leave the check-out blank if the shift is still running."
+              fields={attendanceFields(refs)}
+              action={saveAttendance}
+              submitLabel="Record attendance"
+            />
           ) : null
         }
       />
+
+      {/* Punching your own clock is not a filter and not an admin correction,
+          so it sits on its own line under the bar rather than competing with
+          either. Right-aligned to stack under the button it belongs beside. */}
+      {canPunch ? (
+        <div className="flex flex-wrap items-center justify-end gap-3">
+          <ActionButton
+            action={checkIn}
+            variant="outline"
+            size="md"
+            startIcon={<LogIn />}
+            pendingLabel="Checking in"
+          >
+            Check in
+          </ActionButton>
+          <ActionButton
+            action={checkOut}
+            variant="outline"
+            size="md"
+            startIcon={<LogOut />}
+            pendingLabel="Checking out"
+          >
+            Check out
+          </ActionButton>
+        </div>
+      ) : null}
 
       {records.length === 0 ? (
         <EmptyState
