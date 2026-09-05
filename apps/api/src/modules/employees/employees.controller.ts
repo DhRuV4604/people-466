@@ -4,7 +4,6 @@ import {
   Delete,
   Get,
   Param,
-  ParseUUIDPipe,
   Patch,
   Post,
   Query,
@@ -13,6 +12,7 @@ import { ApiBearerAuth, ApiOperation, ApiTags } from '@nestjs/swagger';
 import { EmployeesService } from './employees.service';
 import { CreateEmployeeDto, UpdateEmployeeDto, QueryEmployeesDto } from './dto/employee.dto';
 import { RequirePermission, CurrentUser } from '../../common/decorators';
+import { ParseEntityIdPipe } from '../../common/validation/entity-id';
 import type { AuthenticatedUser } from '../auth/auth.types';
 
 @ApiTags('employees')
@@ -30,7 +30,7 @@ export class EmployeesController {
 
   @Get(':id')
   @RequirePermission('employees', 'read')
-  findOne(@Param('id', ParseUUIDPipe) id: string, @CurrentUser() user: AuthenticatedUser) {
+  findOne(@Param('id', ParseEntityIdPipe) id: string, @CurrentUser() user: AuthenticatedUser) {
     return this.employees.findOne(id, user);
   }
 
@@ -43,7 +43,7 @@ export class EmployeesController {
   @Patch(':id')
   @RequirePermission('employees', 'update')
   update(
-    @Param('id', ParseUUIDPipe) id: string,
+    @Param('id', ParseEntityIdPipe) id: string,
     @Body() dto: UpdateEmployeeDto,
     @CurrentUser() user: AuthenticatedUser
   ) {
@@ -53,7 +53,7 @@ export class EmployeesController {
   @Delete(':id')
   @RequirePermission('employees', 'delete')
   @ApiOperation({ summary: 'Delete, or archive instead when payslips exist' })
-  remove(@Param('id', ParseUUIDPipe) id: string) {
+  remove(@Param('id', ParseEntityIdPipe) id: string) {
     return this.employees.remove(id);
   }
 }

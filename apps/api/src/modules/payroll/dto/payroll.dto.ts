@@ -9,7 +9,6 @@ import {
   IsNumber,
   IsOptional,
   IsString,
-  IsUUID,
   Matches,
   Max,
   MaxLength,
@@ -30,6 +29,7 @@ import type {
   PayslipStatus,
   RuleCategory,
 } from '@peoplepay360/shared';
+import { IsEntityId } from '../../../common/validation/entity-id';
 
 // ---------------------------------------------------------------- Structures
 
@@ -71,8 +71,8 @@ export class UpsertRuleDto {
   @MaxLength(30)
   code!: string;
 
-  @ApiProperty({ format: 'uuid' })
-  @IsUUID()
+  @ApiProperty({ description: 'Record id' })
+  @IsEntityId()
   structureId!: string;
 
   @ApiProperty({ enum: RULE_CATEGORIES })
@@ -137,9 +137,9 @@ export class UpsertRuleDto {
 }
 
 export class QueryRulesDto {
-  @ApiPropertyOptional({ format: 'uuid' })
+  @ApiPropertyOptional({ description: 'Record id' })
   @IsOptional()
-  @IsUUID()
+  @IsEntityId()
   structureId?: string;
 
   @ApiPropertyOptional({ enum: RULE_CATEGORIES })
@@ -164,13 +164,13 @@ export class EligibilityQueryDto {
   @IsDateString()
   periodEnd!: string;
 
-  @ApiProperty({ format: 'uuid' })
-  @IsUUID()
+  @ApiProperty({ description: 'Record id' })
+  @IsEntityId()
   structureId!: string;
 
-  @ApiPropertyOptional({ format: 'uuid' })
+  @ApiPropertyOptional({ description: 'Record id' })
   @IsOptional()
-  @IsUUID()
+  @IsEntityId()
   departmentId?: string;
 
   @ApiPropertyOptional({ enum: EMPLOYEE_TYPES })
@@ -185,8 +185,8 @@ export class CreatePayrunDto {
   @MaxLength(150)
   name!: string;
 
-  @ApiProperty({ format: 'uuid' })
-  @IsUUID()
+  @ApiProperty({ description: 'Record id' })
+  @IsEntityId()
   structureId!: string;
 
   @ApiProperty({ example: '2026-08-01' })
@@ -197,15 +197,15 @@ export class CreatePayrunDto {
   @IsDateString()
   periodEnd!: string;
 
-  @ApiProperty({ type: [String], format: 'uuid', description: 'Explicitly selected employees' })
+  @ApiProperty({ type: [String], description: 'Explicitly selected employees' })
   @IsArray()
   @ArrayMinSize(1, { message: 'Select at least one employee for this pay run.' })
-  @IsUUID('4', { each: true })
+  @IsEntityId({ each: true })
   employeeIds!: string[];
 
-  @ApiPropertyOptional({ format: 'uuid' })
+  @ApiPropertyOptional({ description: 'Record id' })
   @IsOptional()
-  @IsUUID()
+  @IsEntityId()
   departmentId?: string;
 
   @ApiPropertyOptional({ enum: EMPLOYEE_TYPES })
@@ -229,14 +229,14 @@ export class QueryPayrunsDto {
 // ---------------------------------------------------------------- Payslips
 
 export class QueryPayslipsDto {
-  @ApiPropertyOptional({ format: 'uuid' })
+  @ApiPropertyOptional({ description: 'Record id' })
   @IsOptional()
-  @IsUUID()
+  @IsEntityId()
   employeeId?: string;
 
-  @ApiPropertyOptional({ format: 'uuid' })
+  @ApiPropertyOptional({ description: 'Record id' })
   @IsOptional()
-  @IsUUID()
+  @IsEntityId()
   payrunId?: string;
 
   @ApiPropertyOptional({ enum: PAYSLIP_STATUSES })

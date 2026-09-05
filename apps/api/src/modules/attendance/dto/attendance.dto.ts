@@ -5,21 +5,20 @@ import {
   IsInt,
   IsOptional,
   IsString,
-  IsUUID,
   Max,
   Min,
 } from 'class-validator';
 import { Type } from 'class-transformer';
 import { ATTENDANCE_STATUSES } from '@peoplepay360/shared';
 import type { AttendanceStatus } from '@peoplepay360/shared';
+import { IsEntityId } from '../../../common/validation/entity-id';
 
 export class CreateAttendanceDto {
   @ApiPropertyOptional({
-    format: 'uuid',
     description: 'Ignored for the Employee role, which always records its own attendance',
   })
   @IsOptional()
-  @IsUUID()
+  @IsEntityId()
   employeeId?: string;
 
   @ApiProperty({ example: '2026-09-07T09:00:00.000Z' })
@@ -53,9 +52,9 @@ export class UpdateAttendanceDto extends PartialType(CreateAttendanceDto) {
 }
 
 export class QueryAttendanceDto {
-  @ApiPropertyOptional({ format: 'uuid' })
+  @ApiPropertyOptional({ description: 'Record id' })
   @IsOptional()
-  @IsUUID()
+  @IsEntityId()
   employeeId?: string;
 
   @ApiPropertyOptional({ enum: ATTENDANCE_STATUSES })
@@ -98,13 +97,13 @@ export class AttendanceSummaryQueryDto {
   @IsDateString()
   to?: string;
 
-  @ApiPropertyOptional({ format: 'uuid' })
+  @ApiPropertyOptional({ description: 'Record id' })
   @IsOptional()
-  @IsUUID()
+  @IsEntityId()
   employeeId?: string;
 
-  @ApiPropertyOptional({ format: 'uuid' })
+  @ApiPropertyOptional({ description: 'Record id' })
   @IsOptional()
-  @IsUUID()
+  @IsEntityId()
   departmentId?: string;
 }

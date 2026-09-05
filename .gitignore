@@ -18,5 +18,10 @@ next-env.d.ts
 *.tsbuildinfo
 **/*.tsbuildinfo
 
-# Leftover SQLite database from the pre-PostgreSQL version.
-prisma/
+# Leftover SQLite database from the pre-PostgreSQL version. Anchored with a
+# leading slash: a bare `prisma/` matches at any depth and would silently
+# swallow apps/api/prisma, which holds the schema, migrations and seed.
+/prisma/
+
+# Tool-specific agent pointer, regenerated locally.
+frontend/CLAUDE.md

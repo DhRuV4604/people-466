@@ -6,13 +6,13 @@ import {
   IsNumber,
   IsOptional,
   IsString,
-  IsUUID,
   Min,
   MaxLength,
 } from 'class-validator';
 import { Transform, Type } from 'class-transformer';
 import { CONTRACT_STATUSES, CONTRACT_TYPES } from '@peoplepay360/shared';
 import type { ContractStatus, ContractType } from '@peoplepay360/shared';
+import { IsEntityId } from '../../../common/validation/entity-id';
 
 export class CreateContractDto {
   @ApiProperty({ example: 'Priya Patel — Senior Engineer 2026' })
@@ -20,8 +20,8 @@ export class CreateContractDto {
   @MaxLength(200)
   name!: string;
 
-  @ApiProperty({ format: 'uuid' })
-  @IsUUID()
+  @ApiProperty({ description: 'Record id' })
+  @IsEntityId()
   employeeId!: string;
 
   @ApiProperty({ example: '2026-01-01' })
@@ -49,19 +49,19 @@ export class CreateContractDto {
   @IsEnum(CONTRACT_TYPES as unknown as object)
   contractType?: ContractType;
 
-  @ApiPropertyOptional({ format: 'uuid', nullable: true })
+  @ApiPropertyOptional({ description: 'Record id', nullable: true })
   @IsOptional()
-  @IsUUID()
+  @IsEntityId()
   jobPositionId?: string | null;
 
-  @ApiPropertyOptional({ format: 'uuid', nullable: true })
+  @ApiPropertyOptional({ description: 'Record id', nullable: true })
   @IsOptional()
-  @IsUUID()
+  @IsEntityId()
   workingScheduleId?: string | null;
 
-  @ApiPropertyOptional({ format: 'uuid', nullable: true })
+  @ApiPropertyOptional({ description: 'Record id', nullable: true })
   @IsOptional()
-  @IsUUID()
+  @IsEntityId()
   salaryStructureId?: string | null;
 
   @ApiPropertyOptional({ nullable: true })
@@ -73,9 +73,9 @@ export class CreateContractDto {
 export class UpdateContractDto extends PartialType(CreateContractDto) {}
 
 export class QueryContractsDto {
-  @ApiPropertyOptional({ format: 'uuid' })
+  @ApiPropertyOptional({ description: 'Record id' })
   @IsOptional()
-  @IsUUID()
+  @IsEntityId()
   employeeId?: string;
 
   @ApiPropertyOptional({ enum: CONTRACT_STATUSES })

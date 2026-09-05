@@ -4,7 +4,6 @@ import {
   Delete,
   Get,
   Param,
-  ParseUUIDPipe,
   Patch,
   Post,
   Query,
@@ -19,6 +18,7 @@ import {
 } from './dto/attendance.dto';
 import { RequirePermission, CurrentUser } from '../../common/decorators';
 import type { AuthenticatedUser } from '../auth/auth.types';
+import { ParseEntityIdPipe } from '../../common/validation/entity-id';
 
 @ApiTags('attendance')
 @ApiBearerAuth()
@@ -63,7 +63,7 @@ export class AttendanceController {
 
   @Get(':id')
   @RequirePermission('attendance', 'read')
-  findOne(@Param('id', ParseUUIDPipe) id: string, @CurrentUser() user: AuthenticatedUser) {
+  findOne(@Param('id', ParseEntityIdPipe) id: string, @CurrentUser() user: AuthenticatedUser) {
     return this.attendance.findOne(id, user);
   }
 
@@ -77,7 +77,7 @@ export class AttendanceController {
   @RequirePermission('attendance', 'update')
   @ApiOperation({ summary: 'Correct an entry; the change is recorded for audit' })
   update(
-    @Param('id', ParseUUIDPipe) id: string,
+    @Param('id', ParseEntityIdPipe) id: string,
     @Body() dto: UpdateAttendanceDto,
     @CurrentUser() user: AuthenticatedUser
   ) {
@@ -86,7 +86,7 @@ export class AttendanceController {
 
   @Delete(':id')
   @RequirePermission('attendance', 'delete')
-  remove(@Param('id', ParseUUIDPipe) id: string) {
+  remove(@Param('id', ParseEntityIdPipe) id: string) {
     return this.attendance.remove(id);
   }
 }

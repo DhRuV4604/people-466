@@ -9,7 +9,6 @@ import {
   IsOptional,
   IsPositive,
   IsString,
-  IsUUID,
   Matches,
   Max,
   MaxLength,
@@ -22,6 +21,7 @@ import {
   LEAVE_UNITS,
 } from '@peoplepay360/shared';
 import type { AllocationStatus, LeaveRequestStatus, LeaveUnit } from '@peoplepay360/shared';
+import { IsEntityId } from '../../../common/validation/entity-id';
 
 // ---------------------------------------------------------------- Types
 
@@ -78,12 +78,12 @@ export class UpsertTimeOffTypeDto {
 // ---------------------------------------------------------------- Allocations
 
 export class CreateAllocationDto {
-  @ApiProperty({ format: 'uuid' })
-  @IsUUID()
+  @ApiProperty({ description: 'Record id' })
+  @IsEntityId()
   employeeId!: string;
 
-  @ApiProperty({ format: 'uuid' })
-  @IsUUID()
+  @ApiProperty({ description: 'Record id' })
+  @IsEntityId()
   typeId!: string;
 
   @ApiProperty({ example: 21 })
@@ -115,14 +115,14 @@ export class CreateAllocationDto {
 export class UpdateAllocationDto extends PartialType(CreateAllocationDto) {}
 
 export class QueryAllocationsDto {
-  @ApiPropertyOptional({ format: 'uuid' })
+  @ApiPropertyOptional({ description: 'Record id' })
   @IsOptional()
-  @IsUUID()
+  @IsEntityId()
   employeeId?: string;
 
-  @ApiPropertyOptional({ format: 'uuid' })
+  @ApiPropertyOptional({ description: 'Record id' })
   @IsOptional()
-  @IsUUID()
+  @IsEntityId()
   typeId?: string;
 
   @ApiPropertyOptional({ enum: ALLOCATION_STATUSES })
@@ -135,15 +135,14 @@ export class QueryAllocationsDto {
 
 export class CreateLeaveRequestDto {
   @ApiPropertyOptional({
-    format: 'uuid',
     description: 'Ignored for the Employee role, which always files its own requests',
   })
   @IsOptional()
-  @IsUUID()
+  @IsEntityId()
   employeeId?: string;
 
-  @ApiProperty({ format: 'uuid' })
-  @IsUUID()
+  @ApiProperty({ description: 'Record id' })
+  @IsEntityId()
   typeId!: string;
 
   @ApiProperty({ example: '2026-09-07' })
@@ -172,14 +171,14 @@ export class RefuseRequestDto {
 }
 
 export class QueryLeaveRequestsDto {
-  @ApiPropertyOptional({ format: 'uuid' })
+  @ApiPropertyOptional({ description: 'Record id' })
   @IsOptional()
-  @IsUUID()
+  @IsEntityId()
   employeeId?: string;
 
-  @ApiPropertyOptional({ format: 'uuid' })
+  @ApiPropertyOptional({ description: 'Record id' })
   @IsOptional()
-  @IsUUID()
+  @IsEntityId()
   typeId?: string;
 
   @ApiPropertyOptional({ enum: LEAVE_REQUEST_STATUSES })

@@ -8,7 +8,6 @@ import {
   IsNumber,
   IsOptional,
   IsString,
-  IsUUID,
   Matches,
   Max,
   MaxLength,
@@ -19,6 +18,7 @@ import {
 import { Type } from 'class-transformer';
 import { ROLES, SCHEDULE_TYPES } from '@peoplepay360/shared';
 import type { Role, ScheduleType } from '@peoplepay360/shared';
+import { IsEntityId } from '../../../common/validation/entity-id';
 
 const TIME_PATTERN = /^([01]\d|2[0-3]):[0-5]\d$/;
 
@@ -116,9 +116,9 @@ export class CreateUserDto {
   @MinLength(8, { message: 'Password must be at least 8 characters.' })
   password!: string;
 
-  @ApiPropertyOptional({ format: 'uuid', nullable: true })
+  @ApiPropertyOptional({ description: 'Record id', nullable: true })
   @IsOptional()
-  @IsUUID()
+  @IsEntityId()
   employeeId?: string | null;
 
   @ApiPropertyOptional({ default: true })
@@ -150,9 +150,9 @@ export class UpdateUserDto {
   @MinLength(8, { message: 'Password must be at least 8 characters.' })
   password?: string;
 
-  @ApiPropertyOptional({ format: 'uuid', nullable: true })
+  @ApiPropertyOptional({ description: 'Record id', nullable: true })
   @IsOptional()
-  @IsUUID()
+  @IsEntityId()
   employeeId?: string | null;
 
   @ApiPropertyOptional()

@@ -4,7 +4,6 @@ import {
   Delete,
   Get,
   Param,
-  ParseUUIDPipe,
   Patch,
   Post,
   Query,
@@ -23,6 +22,7 @@ import {
 } from './dto/time-off.dto';
 import { RequirePermission, CurrentUser } from '../../common/decorators';
 import type { AuthenticatedUser } from '../auth/auth.types';
+import { ParseEntityIdPipe } from '../../common/validation/entity-id';
 
 @ApiTags('time-off')
 @ApiBearerAuth()
@@ -46,14 +46,14 @@ export class TimeOffController {
 
   @Patch('types/:id')
   @RequirePermission('timeOffTypes', 'update')
-  updateType(@Param('id', ParseUUIDPipe) id: string, @Body() dto: UpsertTimeOffTypeDto) {
+  updateType(@Param('id', ParseEntityIdPipe) id: string, @Body() dto: UpsertTimeOffTypeDto) {
     return this.timeOff.updateType(id, dto);
   }
 
   @Delete('types/:id')
   @RequirePermission('timeOffTypes', 'delete')
   @ApiOperation({ summary: 'Delete, or archive instead when requests reference it' })
-  removeType(@Param('id', ParseUUIDPipe) id: string) {
+  removeType(@Param('id', ParseEntityIdPipe) id: string) {
     return this.timeOff.removeType(id);
   }
 
@@ -63,7 +63,7 @@ export class TimeOffController {
   @RequirePermission('timeOffAllocations', 'read')
   @ApiOperation({ summary: 'Derived balance: approved allocations minus approved requests' })
   balances(
-    @Param('employeeId', ParseUUIDPipe) employeeId: string,
+    @Param('employeeId', ParseEntityIdPipe) employeeId: string,
     @CurrentUser() user: AuthenticatedUser
   ) {
     // An employee may only read their own balances.
@@ -81,7 +81,7 @@ export class TimeOffController {
 
   @Get('allocations/:id')
   @RequirePermission('timeOffAllocations', 'read')
-  findAllocation(@Param('id', ParseUUIDPipe) id: string, @CurrentUser() user: AuthenticatedUser) {
+  findAllocation(@Param('id', ParseEntityIdPipe) id: string, @CurrentUser() user: AuthenticatedUser) {
     return this.timeOff.findAllocation(id, user);
   }
 
@@ -93,14 +93,14 @@ export class TimeOffController {
 
   @Patch('allocations/:id')
   @RequirePermission('timeOffAllocations', 'update')
-  updateAllocation(@Param('id', ParseUUIDPipe) id: string, @Body() dto: UpdateAllocationDto) {
+  updateAllocation(@Param('id', ParseEntityIdPipe) id: string, @Body() dto: UpdateAllocationDto) {
     return this.timeOff.updateAllocation(id, dto);
   }
 
   @Post('allocations/:id/approve')
   @RequirePermission('timeOffAllocations', 'approve')
   approveAllocation(
-    @Param('id', ParseUUIDPipe) id: string,
+    @Param('id', ParseEntityIdPipe) id: string,
     @CurrentUser() user: AuthenticatedUser
   ) {
     return this.timeOff.approveAllocation(id, user);
@@ -108,13 +108,13 @@ export class TimeOffController {
 
   @Post('allocations/:id/refuse')
   @RequirePermission('timeOffAllocations', 'approve')
-  refuseAllocation(@Param('id', ParseUUIDPipe) id: string) {
+  refuseAllocation(@Param('id', ParseEntityIdPipe) id: string) {
     return this.timeOff.refuseAllocation(id);
   }
 
   @Delete('allocations/:id')
   @RequirePermission('timeOffAllocations', 'delete')
-  removeAllocation(@Param('id', ParseUUIDPipe) id: string) {
+  removeAllocation(@Param('id', ParseEntityIdPipe) id: string) {
     return this.timeOff.removeAllocation(id);
   }
 
@@ -128,7 +128,7 @@ export class TimeOffController {
 
   @Get('requests/:id')
   @RequirePermission('timeOffRequests', 'read')
-  findRequest(@Param('id', ParseUUIDPipe) id: string, @CurrentUser() user: AuthenticatedUser) {
+  findRequest(@Param('id', ParseEntityIdPipe) id: string, @CurrentUser() user: AuthenticatedUser) {
     return this.timeOff.findRequest(id, user);
   }
 
@@ -142,7 +142,7 @@ export class TimeOffController {
   @Patch('requests/:id')
   @RequirePermission('timeOffRequests', 'update')
   updateRequest(
-    @Param('id', ParseUUIDPipe) id: string,
+    @Param('id', ParseEntityIdPipe) id: string,
     @Body() dto: UpdateLeaveRequestDto,
     @CurrentUser() user: AuthenticatedUser
   ) {
@@ -152,14 +152,14 @@ export class TimeOffController {
   @Post('requests/:id/approve')
   @RequirePermission('timeOffRequests', 'approve')
   @ApiOperation({ summary: 'Approve and draw the duration from a specific allocation' })
-  approveRequest(@Param('id', ParseUUIDPipe) id: string, @CurrentUser() user: AuthenticatedUser) {
+  approveRequest(@Param('id', ParseEntityIdPipe) id: string, @CurrentUser() user: AuthenticatedUser) {
     return this.timeOff.approveRequest(id, user);
   }
 
   @Post('requests/:id/refuse')
   @RequirePermission('timeOffRequests', 'approve')
   refuseRequest(
-    @Param('id', ParseUUIDPipe) id: string,
+    @Param('id', ParseEntityIdPipe) id: string,
     @Body() dto: RefuseRequestDto,
     @CurrentUser() user: AuthenticatedUser
   ) {
@@ -169,13 +169,13 @@ export class TimeOffController {
   @Post('requests/:id/cancel')
   @RequirePermission('timeOffRequests', 'read')
   @ApiOperation({ summary: 'Withdraw a request; employees may cancel only their own' })
-  cancelRequest(@Param('id', ParseUUIDPipe) id: string, @CurrentUser() user: AuthenticatedUser) {
+  cancelRequest(@Param('id', ParseEntityIdPipe) id: string, @CurrentUser() user: AuthenticatedUser) {
     return this.timeOff.cancelRequest(id, user);
   }
 
   @Delete('requests/:id')
   @RequirePermission('timeOffRequests', 'delete')
-  removeRequest(@Param('id', ParseUUIDPipe) id: string) {
+  removeRequest(@Param('id', ParseEntityIdPipe) id: string) {
     return this.timeOff.removeRequest(id);
   }
 }

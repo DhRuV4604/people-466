@@ -4,7 +4,6 @@ import {
   Delete,
   Get,
   Param,
-  ParseUUIDPipe,
   Patch,
   Post,
   Query,
@@ -14,6 +13,7 @@ import { ContractsService } from './contracts.service';
 import { CreateContractDto, UpdateContractDto, QueryContractsDto } from './dto/contract.dto';
 import { RequirePermission, CurrentUser } from '../../common/decorators';
 import type { AuthenticatedUser } from '../auth/auth.types';
+import { ParseEntityIdPipe } from '../../common/validation/entity-id';
 
 @ApiTags('contracts')
 @ApiBearerAuth()
@@ -30,7 +30,7 @@ export class ContractsController {
 
   @Get(':id')
   @RequirePermission('contracts', 'read')
-  findOne(@Param('id', ParseUUIDPipe) id: string, @CurrentUser() user: AuthenticatedUser) {
+  findOne(@Param('id', ParseEntityIdPipe) id: string, @CurrentUser() user: AuthenticatedUser) {
     return this.contracts.findOne(id, user);
   }
 
@@ -43,14 +43,14 @@ export class ContractsController {
 
   @Patch(':id')
   @RequirePermission('contracts', 'update')
-  update(@Param('id', ParseUUIDPipe) id: string, @Body() dto: UpdateContractDto) {
+  update(@Param('id', ParseEntityIdPipe) id: string, @Body() dto: UpdateContractDto) {
     return this.contracts.update(id, dto);
   }
 
   @Delete(':id')
   @RequirePermission('contracts', 'delete')
   @ApiOperation({ summary: 'Delete, or cancel instead when payslips reference it' })
-  remove(@Param('id', ParseUUIDPipe) id: string) {
+  remove(@Param('id', ParseEntityIdPipe) id: string) {
     return this.contracts.remove(id);
   }
 }

@@ -35,4 +35,4 @@ EXPOSE 4000
 
 # Apply pending migrations before serving so a fresh volume is usable, then seed
 # only when the database is still empty.
-CMD ["sh", "-c", "npx prisma migrate deploy --schema apps/api/prisma/schema.prisma && node apps/api/dist/src/main.js"]
+CMD ["sh", "-c", "npx prisma migrate deploy --schema apps/api/prisma/schema.prisma && npx tsx apps/api/prisma/seed.ts --if-empty && node apps/api/dist/src/main.js"]

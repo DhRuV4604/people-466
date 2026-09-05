@@ -6,10 +6,10 @@ import {
   IsEnum,
   IsOptional,
   IsString,
-  IsUUID,
   MaxLength,
 } from 'class-validator';
 import { Transform } from 'class-transformer';
+import { IsEntityId } from '../../../common/validation/entity-id';
 import { EMPLOYEE_TYPES, EMPLOYEE_STATUSES } from '@peoplepay360/shared';
 import type { EmployeeType, EmployeeStatus } from '@peoplepay360/shared';
 
@@ -79,24 +79,24 @@ export class CreateEmployeeDto {
   @IsDateString()
   exitDate?: string | null;
 
-  @ApiPropertyOptional({ format: 'uuid', nullable: true })
+  @ApiPropertyOptional({ description: 'Record id', nullable: true })
   @IsOptional()
-  @IsUUID()
+  @IsEntityId()
   departmentId?: string | null;
 
-  @ApiPropertyOptional({ format: 'uuid', nullable: true })
+  @ApiPropertyOptional({ description: 'Record id', nullable: true })
   @IsOptional()
-  @IsUUID()
+  @IsEntityId()
   jobPositionId?: string | null;
 
-  @ApiPropertyOptional({ format: 'uuid', nullable: true })
+  @ApiPropertyOptional({ description: 'Record id', nullable: true })
   @IsOptional()
-  @IsUUID()
+  @IsEntityId()
   managerId?: string | null;
 
-  @ApiPropertyOptional({ format: 'uuid', nullable: true })
+  @ApiPropertyOptional({ description: 'Record id', nullable: true })
   @IsOptional()
-  @IsUUID()
+  @IsEntityId()
   workingScheduleId?: string | null;
 }
 
@@ -108,9 +108,9 @@ export class QueryEmployeesDto {
   @IsString()
   q?: string;
 
-  @ApiPropertyOptional({ format: 'uuid' })
+  @ApiPropertyOptional({ description: 'Record id' })
   @IsOptional()
-  @IsUUID()
+  @IsEntityId()
   departmentId?: string;
 
   @ApiPropertyOptional({ enum: EMPLOYEE_TYPES })

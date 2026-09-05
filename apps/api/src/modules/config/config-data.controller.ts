@@ -4,7 +4,6 @@ import {
   Delete,
   Get,
   Param,
-  ParseUUIDPipe,
   Patch,
   Post,
 } from '@nestjs/common';
@@ -19,6 +18,7 @@ import {
 } from './dto/config.dto';
 import { RequirePermission, CurrentUser } from '../../common/decorators';
 import type { AuthenticatedUser } from '../auth/auth.types';
+import { ParseEntityIdPipe } from '../../common/validation/entity-id';
 
 @ApiTags('configuration')
 @ApiBearerAuth()
@@ -36,7 +36,7 @@ export class ConfigDataController {
 
   @Get('working-schedules/:id')
   @RequirePermission('workingSchedules', 'read')
-  findSchedule(@Param('id', ParseUUIDPipe) id: string) {
+  findSchedule(@Param('id', ParseEntityIdPipe) id: string) {
     return this.config.findSchedule(id);
   }
 
@@ -49,13 +49,13 @@ export class ConfigDataController {
 
   @Patch('working-schedules/:id')
   @RequirePermission('workingSchedules', 'update')
-  updateSchedule(@Param('id', ParseUUIDPipe) id: string, @Body() dto: UpsertScheduleDto) {
+  updateSchedule(@Param('id', ParseEntityIdPipe) id: string, @Body() dto: UpsertScheduleDto) {
     return this.config.updateSchedule(id, dto);
   }
 
   @Delete('working-schedules/:id')
   @RequirePermission('workingSchedules', 'delete')
-  removeSchedule(@Param('id', ParseUUIDPipe) id: string) {
+  removeSchedule(@Param('id', ParseEntityIdPipe) id: string) {
     return this.config.removeSchedule(id);
   }
 
@@ -75,13 +75,13 @@ export class ConfigDataController {
 
   @Patch('departments/:id')
   @RequirePermission('employees', 'update')
-  updateDepartment(@Param('id', ParseUUIDPipe) id: string, @Body() dto: UpsertDepartmentDto) {
+  updateDepartment(@Param('id', ParseEntityIdPipe) id: string, @Body() dto: UpsertDepartmentDto) {
     return this.config.updateDepartment(id, dto);
   }
 
   @Delete('departments/:id')
   @RequirePermission('employees', 'delete')
-  removeDepartment(@Param('id', ParseUUIDPipe) id: string) {
+  removeDepartment(@Param('id', ParseEntityIdPipe) id: string) {
     return this.config.removeDepartment(id);
   }
 
@@ -101,13 +101,13 @@ export class ConfigDataController {
 
   @Patch('job-positions/:id')
   @RequirePermission('employees', 'update')
-  updatePosition(@Param('id', ParseUUIDPipe) id: string, @Body() dto: UpsertPositionDto) {
+  updatePosition(@Param('id', ParseEntityIdPipe) id: string, @Body() dto: UpsertPositionDto) {
     return this.config.updatePosition(id, dto);
   }
 
   @Delete('job-positions/:id')
   @RequirePermission('employees', 'delete')
-  removePosition(@Param('id', ParseUUIDPipe) id: string) {
+  removePosition(@Param('id', ParseEntityIdPipe) id: string) {
     return this.config.removePosition(id);
   }
 
@@ -127,13 +127,13 @@ export class ConfigDataController {
 
   @Patch('users/:id')
   @RequirePermission('users', 'update')
-  updateUser(@Param('id', ParseUUIDPipe) id: string, @Body() dto: UpdateUserDto) {
+  updateUser(@Param('id', ParseEntityIdPipe) id: string, @Body() dto: UpdateUserDto) {
     return this.config.updateUser(id, dto);
   }
 
   @Delete('users/:id')
   @RequirePermission('users', 'delete')
-  removeUser(@Param('id', ParseUUIDPipe) id: string, @CurrentUser() user: AuthenticatedUser) {
+  removeUser(@Param('id', ParseEntityIdPipe) id: string, @CurrentUser() user: AuthenticatedUser) {
     return this.config.removeUser(id, user);
   }
 }

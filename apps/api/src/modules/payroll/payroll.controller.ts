@@ -4,7 +4,6 @@ import {
   Delete,
   Get,
   Param,
-  ParseUUIDPipe,
   Patch,
   Post,
   Query,
@@ -31,6 +30,7 @@ import {
 import { RequirePermission, CurrentUser } from '../../common/decorators';
 import type { AuthenticatedUser } from '../auth/auth.types';
 import { PrismaService } from '../../prisma/prisma.service';
+import { ParseEntityIdPipe } from '../../common/validation/entity-id';
 
 // ---------------------------------------------------------------- Pay runs
 
@@ -57,7 +57,7 @@ export class PayrunsController {
 
   @Get(':id')
   @RequirePermission('payruns', 'read')
-  findOne(@Param('id', ParseUUIDPipe) id: string, @CurrentUser() user: AuthenticatedUser) {
+  findOne(@Param('id', ParseEntityIdPipe) id: string, @CurrentUser() user: AuthenticatedUser) {
     return this.payruns.findOne(id, user);
   }
 
@@ -71,34 +71,34 @@ export class PayrunsController {
   @Post(':id/compute')
   @RequirePermission('payruns', 'update')
   @ApiOperation({ summary: 'Compute every payslip from contract, attendance and leave' })
-  compute(@Param('id', ParseUUIDPipe) id: string, @CurrentUser() user: AuthenticatedUser) {
+  compute(@Param('id', ParseEntityIdPipe) id: string, @CurrentUser() user: AuthenticatedUser) {
     return this.payruns.compute(id, user);
   }
 
   @Post(':id/validate')
   @RequirePermission('payruns', 'update')
   @ApiOperation({ summary: 'Validate; blocked while blocking warnings remain' })
-  validate(@Param('id', ParseUUIDPipe) id: string, @CurrentUser() user: AuthenticatedUser) {
+  validate(@Param('id', ParseEntityIdPipe) id: string, @CurrentUser() user: AuthenticatedUser) {
     return this.payruns.validate(id, user);
   }
 
   @Post(':id/mark-paid')
   @RequirePermission('payruns', 'update')
-  markPaid(@Param('id', ParseUUIDPipe) id: string, @CurrentUser() user: AuthenticatedUser) {
+  markPaid(@Param('id', ParseEntityIdPipe) id: string, @CurrentUser() user: AuthenticatedUser) {
     return this.payruns.markPaid(id, user);
   }
 
   @Post(':id/send-payslips')
   @RequirePermission('payruns', 'update')
   @ApiOperation({ summary: 'Bulk-deliver payslip PDFs to each employee' })
-  sendPayslips(@Param('id', ParseUUIDPipe) id: string) {
+  sendPayslips(@Param('id', ParseEntityIdPipe) id: string) {
     return this.payruns.sendPayslips(id);
   }
 
   @Delete(':id')
   @RequirePermission('payruns', 'delete')
   @ApiOperation({ summary: 'Delete a pay run; paid runs are preserved as history' })
-  remove(@Param('id', ParseUUIDPipe) id: string) {
+  remove(@Param('id', ParseEntityIdPipe) id: string) {
     return this.payruns.remove(id);
   }
 }
@@ -123,13 +123,13 @@ export class PayslipsController {
 
   @Get(':id')
   @RequirePermission('payslips', 'read')
-  findOne(@Param('id', ParseUUIDPipe) id: string, @CurrentUser() user: AuthenticatedUser) {
+  findOne(@Param('id', ParseEntityIdPipe) id: string, @CurrentUser() user: AuthenticatedUser) {
     return this.payslips.findOne(id, user);
   }
 
   @Post(':id/recompute')
   @RequirePermission('payslips', 'update')
-  recompute(@Param('id', ParseUUIDPipe) id: string, @CurrentUser() user: AuthenticatedUser) {
+  recompute(@Param('id', ParseEntityIdPipe) id: string, @CurrentUser() user: AuthenticatedUser) {
     return this.payslips.recompute(id, user);
   }
 
@@ -141,7 +141,7 @@ export class PayslipsController {
   @ApiProduces('application/pdf')
   @ApiOperation({ summary: 'Download the payslip as a PDF' })
   async downloadPdf(
-    @Param('id', ParseUUIDPipe) id: string,
+    @Param('id', ParseEntityIdPipe) id: string,
     @CurrentUser() user: AuthenticatedUser,
     @Res() res: Response
   ): Promise<void> {
@@ -184,7 +184,7 @@ export class SalaryConfigController {
 
   @Get('salary-structures/:id')
   @RequirePermission('salaryStructures', 'read')
-  findStructure(@Param('id', ParseUUIDPipe) id: string) {
+  findStructure(@Param('id', ParseEntityIdPipe) id: string) {
     return this.config.findStructure(id);
   }
 
@@ -196,13 +196,13 @@ export class SalaryConfigController {
 
   @Patch('salary-structures/:id')
   @RequirePermission('salaryStructures', 'update')
-  updateStructure(@Param('id', ParseUUIDPipe) id: string, @Body() dto: UpsertStructureDto) {
+  updateStructure(@Param('id', ParseEntityIdPipe) id: string, @Body() dto: UpsertStructureDto) {
     return this.config.updateStructure(id, dto);
   }
 
   @Delete('salary-structures/:id')
   @RequirePermission('salaryStructures', 'delete')
-  removeStructure(@Param('id', ParseUUIDPipe) id: string) {
+  removeStructure(@Param('id', ParseEntityIdPipe) id: string) {
     return this.config.removeStructure(id);
   }
 
@@ -221,13 +221,13 @@ export class SalaryConfigController {
 
   @Patch('salary-rules/:id')
   @RequirePermission('salaryRules', 'update')
-  updateRule(@Param('id', ParseUUIDPipe) id: string, @Body() dto: UpsertRuleDto) {
+  updateRule(@Param('id', ParseEntityIdPipe) id: string, @Body() dto: UpsertRuleDto) {
     return this.config.updateRule(id, dto);
   }
 
   @Delete('salary-rules/:id')
   @RequirePermission('salaryRules', 'delete')
-  removeRule(@Param('id', ParseUUIDPipe) id: string) {
+  removeRule(@Param('id', ParseEntityIdPipe) id: string) {
     return this.config.removeRule(id);
   }
 
