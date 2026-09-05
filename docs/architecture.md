@@ -161,11 +161,19 @@ holds rows the browser then has to be trusted to hide.
 
 ## Ids
 
-Every primary key is a **cuid** (`@default(cuid())`), not a UUID. This bit once: the DTOs
-validated ids with `IsUUID` and the routes with `ParseUUIDPipe`, so every by-id route and every
-relation filter returned 400. `api/src/common/validation/entity-id.ts` now provides
-`IsEntityId` and `ParseEntityIdPipe`, which match the ids the database actually issues. There
-are no `IsUUID` or `ParseUUIDPipe` left in the modules, and none should return.
+Every primary key is a **UUIDv7** (`@default(uuid(7))`) — globally unique but time-sortable,
+unlike UUIDv4, so index locality stays good.
+
+Ids are still **not** validated with `IsUUID`/`ParseUUIDPipe`. This bit once, when the keys were
+cuids and every by-id route returned 400; the validator that replaced it is deliberately kept
+even though the keys are now genuinely UUIDs, for two reasons. The id-bearing columns that carry
+no foreign key — `AuditLog.entityId`, `Attendance.editedById`, the `approvedBy`/`refusedBy`/
+`paidBy` fields — are plain text and are not guaranteed to be UUIDs at all. And a validator that
+does not hard-code the id format means changing strategy again would not mean editing every DTO.
+
+So `api/src/common/validation/entity-id.ts` provides `IsEntityId` and `ParseEntityIdPipe`,
+matching a loose `^[A-Za-z0-9_-]{16,64}$` — enough to reject empty strings and obvious junk.
+There are no `IsUUID` or `ParseUUIDPipe` left in the modules, and none should return.
 
 ## Money and time
 

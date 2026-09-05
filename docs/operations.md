@@ -165,8 +165,9 @@ it must be `http://api:4000`, not `localhost`.
 `docker compose logs api` will usually show a database connection error underneath.
 
 **A by-id route returns 400.**
-Ids are cuids. If a DTO or route parameter validates them as UUIDs, every one of them fails. Use
-`IsEntityId` and `ParseEntityIdPipe` from `api/src/common/validation/entity-id.ts`.
+Primary keys are UUIDv7, but several id-bearing columns carry no foreign key and are plain text,
+so `IsUUID`/`ParseUUIDPipe` will reject valid values. Use `IsEntityId` and `ParseEntityIdPipe`
+from `api/src/common/validation/entity-id.ts`.
 
 **A create fails with "property … should not exist".**
 The API rejects unknown body fields rather than stripping them. Something is sending a value the
