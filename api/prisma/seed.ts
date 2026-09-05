@@ -13,6 +13,9 @@ import {
   type ScheduleType,
 } from '@prisma/client';
 import bcrypt from 'bcryptjs';
+import { createHash, randomUUID } from 'node:crypto';
+import { mkdir, writeFile } from 'node:fs/promises';
+import { join, resolve } from 'node:path';
 
 const prisma = new PrismaClient();
 
@@ -30,6 +33,92 @@ function rand(): number {
 }
 const randInt = (min: number, max: number) => Math.floor(rand() * (max - min + 1)) + min;
 const pick = <T,>(arr: T[]): T => arr[Math.floor(rand() * arr.length)];
+
+/**
+ * Gives every seeded employee a starter picture from DiceBear.
+ *
+ * The app already does this for a newly created employee
+ * (`EmployeesService.giveStarterAvatar`); the seed writes rows through Prisma
+ * directly and so never went down that path, which is why a seeded demo had
+ * initials everywhere. This mirrors that logic rather than reaching into Nest,
+ * because a seed script has no injector to ask for the service.
+ *
+ * PNG, not the SVG DiceBear also offers: the storage layer checks a file's
+ * first bytes against its declared type, and an SVG is a document that can
+ * carry script.
+ *
+ * Seeded with the employee id rather than their name, matching the service's
+ * reasoning that a third-party request has no business carrying anything about
+ * the person — but fixed rather than random, so a reseed of the same database
+ * produces the same faces instead of a fresh set every run.
+ *
+ * Failures are per-employee and swallowed. A demo without one picture is worth
+ * far more than a seed that aborts halfway because a laptop was offline, and
+ * the fallback is the initials that were there before.
+ */
+async function giveEveryoneAnAvatar(
+  employees: { id: string; name: string }[],
+  uploadedById: string
+): Promise<void> {
+  const base = (process.env.AVATAR_API_URL ?? 'https://api.dicebear.com/10.x/critters/png').trim();
+  if (!base) {
+    console.log('Avatars: AVATAR_API_URL is empty, leaving everyone on initials.');
+    return;
+  }
+
+  const size = Number(process.env.AVATAR_SIZE ?? 256);
+  const root = resolve(process.env.STORAGE_ROOT ?? join(__dirname, '..', 'storage'));
+  const now = new Date();
+  // Same yearly/monthly grouping the storage service uses, so these files sit
+  // where every other stored file does and `read` finds them by the same rule.
+  const folder = ['avatars', String(now.getUTCFullYear()), String(now.getUTCMonth() + 1).padStart(2, '0')].join('/');
+  await mkdir(join(root, folder), { recursive: true });
+
+  console.log(`Fetching ${employees.length} avatars from DiceBear...`);
+  let stored = 0;
+
+  // Sequential on purpose: this is a courtesy call to a free public API, and
+  // forty parallel requests is how a demo seed gets itself rate-limited.
+  for (const employee of employees) {
+    try {
+      const response = await fetch(`${base}?seed=${encodeURIComponent(employee.id)}&size=${size}`, {
+        signal: AbortSignal.timeout(8000),
+      });
+      if (!response.ok) throw new Error(`upstream said ${response.status}`);
+
+      const buffer = Buffer.from(await response.arrayBuffer());
+      // The storage layer would reject a truncated file on upload; the seed
+      // checks the same signature so a bad byte range fails here rather than
+      // becoming an avatar that 500s the first time anyone opens the page.
+      const isPng = buffer.subarray(0, 8).equals(Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]));
+      if (!isPng) throw new Error('what came back was not a PNG');
+
+      const key = `${folder}/${randomUUID()}.png`;
+      await writeFile(join(root, key), buffer);
+
+      const file = await prisma.storedFile.create({
+        data: {
+          key,
+          filename: 'avatar.png',
+          mimeType: 'image/png',
+          size: buffer.length,
+          checksum: createHash('sha256').update(buffer).digest('hex'),
+          uploadedById,
+        },
+      });
+
+      await prisma.employee.update({
+        where: { id: employee.id },
+        data: { avatarId: file.id },
+      });
+      stored += 1;
+    } catch (error) {
+      console.warn(`  no avatar for ${employee.name}: ${error instanceof Error ? error.message : 'unknown'}`);
+    }
+  }
+
+  console.log(`  ${stored}/${employees.length} avatars stored`);
+}
 
 async function main() {
   // The container entrypoint passes --if-empty so a restart against an existing
@@ -56,6 +145,11 @@ async function main() {
   await prisma.workingSchedule.deleteMany();
   await prisma.jobPosition.deleteMany();
   await prisma.department.deleteMany();
+  // Stored files go after everything that points at them and before the users
+  // who uploaded them. The bytes on disk are left alone: they are orphaned, not
+  // dangerous, and a seed that walks a directory deleting things is worse.
+  await prisma.document.deleteMany();
+  await prisma.storedFile.deleteMany();
   await prisma.user.deleteMany();
   // Policy is a singleton rather than a collection, so a re-seed puts it back
   // to the documented defaults instead of carrying an edited cap forward.
@@ -712,6 +806,15 @@ async function main() {
     data: { workEmail: 'employee@peoplepay360.com' },
   });
 
+  // ---------------------------------------------------------------- Avatars
+  // Attributed to the admin: a stored file needs an uploader, and the admin is
+  // the closest thing a seed has to the person who put them there.
+  const avatarUploader = await prisma.user.findUniqueOrThrow({
+    where: { email: 'admin@peoplepay360.com' },
+    select: { id: true },
+  });
+  await giveEveryoneAnAvatar(createdEmployees, avatarUploader.id);
+
   // ---------------------------------------------------------------- Attendance
   console.log('Generating attendance history...');
 
@@ -1052,6 +1155,7 @@ async function main() {
   const counts = {
     users: await prisma.user.count(),
     employees: await prisma.employee.count(),
+    avatars: await prisma.employee.count({ where: { avatarId: { not: null } } }),
     contracts: await prisma.contract.count(),
     schedules: await prisma.workingSchedule.count(),
     attendance: await prisma.attendance.count(),
