@@ -216,7 +216,16 @@ export default async function TimeOffPage({
             any menu a row opens past its edge. No other screen animates its
             body, so this one no longer does either. */}
         <div className="mt-4">
-          <TabsContent value="requests" className="flex flex-col gap-6">
+          {/* layout={false}: the tab content is a motion div that animates
+              its own layout, so it scale-transforms — visibly stretching the
+              table — on ANY size change, including the row count dropping when
+              a filter is applied. Switching tabs still crossfades; only the
+              resize animation is off. */}
+          <TabsContent
+            value="requests"
+            layout={false}
+            className="flex flex-col gap-6"
+          >
             <FilterBar
               search={{ placeholder: "Search employee" }}
               selects={[
@@ -276,7 +285,11 @@ export default async function TimeOffPage({
           </TabsContent>
 
           {canReadAllocations ? (
-            <TabsContent value="allocations" className="flex flex-col gap-6">
+            <TabsContent
+            value="allocations"
+            layout={false}
+            className="flex flex-col gap-6"
+          >
               <FilterBar
                 selects={[
                   {
@@ -344,7 +357,11 @@ export default async function TimeOffPage({
           ) : null}
 
           {canReadTypes ? (
-            <TabsContent value="types" className="flex flex-col gap-6">
+            <TabsContent
+            value="types"
+            layout={false}
+            className="flex flex-col gap-6"
+          >
               <FilterBar
                 selects={[
                   {
