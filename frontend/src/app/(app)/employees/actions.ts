@@ -2,6 +2,8 @@
 
 import { redirect } from "next/navigation";
 
+import type { EmployeeDetailDto } from "@peoplepay360/shared";
+
 import {
   callAction,
   deleteRecord,
@@ -16,12 +18,35 @@ const EMPLOYEE = {
   label: "Employee",
 };
 
-/** Creates when the form carries no id, updates when it does. */
+/**
+ * Creates when the form carries no id, updates when it does.
+ *
+ * A create also issues a sign-in. Where the invite could not be delivered the
+ * API hands back the one-time password, and it is put in front of whoever
+ * created the employee: it exists nowhere else, so saying nothing would leave
+ * them with an account no one can get into.
+ */
 export async function saveEmployee(
   _previous: FormState,
   formData: FormData,
 ): Promise<FormState> {
-  return saveRecord(EMPLOYEE, formData);
+  const state = await saveRecord<EmployeeDetailDto>(EMPLOYEE, formData);
+  const invite = state.record?.invite;
+
+  if (!state.ok || !invite || invite.delivered) return state;
+
+  return {
+    ...state,
+    message: undefined,
+    warning: {
+      title: "Employee created, but the invite was not sent.",
+      body:
+        invite.error ??
+        "No mail transport is configured, so nothing was delivered.",
+      secret: invite.oneTimePassword,
+      secretLabel: "One-time password — give it to them yourself",
+    },
+  };
 }
 
 export async function deleteEmployee(id: string): Promise<FormState> {
@@ -47,11 +72,28 @@ export async function deleteEmployeeAndReturn(id: string): Promise<FormState> {
  * install without mail configured.
  */
 export async function reinviteEmployee(id: string): Promise<FormState> {
-  return callAction<{ delivered: boolean; error?: string }>({
+  const state = await callAction<{
+    delivered: boolean;
+    error?: string;
+    oneTimePassword?: string;
+  }>({
     path: `/employees/${id}/reinvite`,
-    message: (result) =>
-      result.delivered
-        ? "Invite sent. The new password works once."
-        : `A new password was set but the email did not send${result.error ? `: ${result.error}` : "."}`,
+    message: "Invite sent. The new password works once.",
   });
+
+  const result = state.record;
+  if (!state.ok || !result || result.delivered) return state;
+
+  return {
+    ...state,
+    message: undefined,
+    warning: {
+      title: "A new password was set, but the invite was not sent.",
+      body:
+        result.error ??
+        "No mail transport is configured, so nothing was delivered.",
+      secret: result.oneTimePassword,
+      secretLabel: "One-time password — give it to them yourself",
+    },
+  };
 }

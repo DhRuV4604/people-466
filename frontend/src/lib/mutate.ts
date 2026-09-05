@@ -11,7 +11,7 @@ import { REF_TAGS } from "@/lib/refs";
  * every screen: a banner message, per-field messages, and a success flag the
  * dialog uses to close itself.
  */
-export type FormState = {
+export type FormState<T = unknown> = {
   ok?: boolean;
   /** Banner message, for anything not attributable to a single field. */
   error?: string;
@@ -20,6 +20,23 @@ export type FormState = {
   message?: string;
   /** Id of the record that was written, so the caller can navigate to it. */
   id?: string;
+  /**
+   * What the API returned. For a caller that needs more than "it worked" —
+   * whether an invite actually went out, say.
+   */
+  record?: T;
+  /**
+   * The write succeeded but something about it needs saying, and a toast will
+   * not do: it holds a value that exists nowhere else and has to be read,
+   * copied, and acted on before it is gone.
+   */
+  warning?: {
+    title: string;
+    body: string;
+    /** Shown in a copyable box. Never logged, never stored. */
+    secret?: string;
+    secretLabel?: string;
+  };
 };
 
 export const FORM_IDLE: FormState = {};
@@ -92,7 +109,7 @@ function toFieldErrors(
 }
 
 /** Turns any thrown error into something the form can render. */
-function toFormState(error: unknown, fields: FieldSpec[]): FormState {
+function toFormState<T>(error: unknown, fields: FieldSpec[]): FormState<T> {
   if (error instanceof ApiError) {
     const fieldErrors = toFieldErrors(error.details, fields);
     // With every message attributed to a field, the banner would just repeat
@@ -107,18 +124,18 @@ function toFormState(error: unknown, fields: FieldSpec[]): FormState {
  * action per resource covers both, which is why a resource needs roughly ten
  * lines of its own.
  */
-export async function saveRecord(
+export async function saveRecord<T = unknown>(
   config: ResourceConfig,
   formData: FormData,
   /** Values the form does not collect, such as an id from the page context. */
   extra?: FieldValues,
-): Promise<FormState> {
+): Promise<FormState<T>> {
   const id = String(formData.get("id") ?? "").trim();
   const { values, fieldErrors } = readForm(formData, config.fields);
   if (fieldErrors) return { fieldErrors };
 
   try {
-    const record = await apiFetch<{ id?: string } | undefined>(
+    const record = await apiFetch<(T & { id?: string }) | undefined>(
       id ? `${config.path}/${id}` : config.path,
       { method: id ? "PATCH" : "POST", body: { ...values, ...extra } },
     );
@@ -126,10 +143,11 @@ export async function saveRecord(
     return {
       ok: true,
       id: record?.id ?? id,
+      record,
       message: `${config.label} ${id ? "updated" : "created"}.`,
     };
   } catch (error) {
-    return toFormState(error, config.fields);
+    return toFormState<T>(error, config.fields);
   }
 }
 
@@ -178,7 +196,7 @@ export async function callAction<T = unknown>(options: {
    * did — how many emails went out, say — so the confirmation carries it.
    */
   message: string | ((result: T) => string);
-}): Promise<FormState> {
+}): Promise<FormState<T>> {
   try {
     const result = await apiFetch<T>(options.path, {
       method: options.method ?? "POST",
@@ -187,12 +205,13 @@ export async function callAction<T = unknown>(options: {
     revalidateAll(options.path);
     return {
       ok: true,
+      record: result,
       message:
         typeof options.message === "function"
           ? options.message(result)
           : options.message,
     };
   } catch (error) {
-    return toFormState(error, []);
+    return toFormState<T>(error, []);
   }
 }

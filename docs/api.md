@@ -119,10 +119,18 @@ is no separate step and no way to end up with one without the other. It generate
 password, mails it, and records the attempt in the outbox with the password masked. `canSignIn:
 false` creates the account inactive and sends nothing.
 
+The create response carries `invite`. When the mail could not be delivered — no transport
+configured, or the send failed — it reports `delivered: false` with the reason **and the
+one-time password**, because that is the only copy: the account holds a hash and the outbox
+holds a masked body. Whoever created the employee is the one person who can pass it on, and the
+web client shows it once in a dialog that must be dismissed. `invitedAt` is set only on a real
+delivery.
+
 `reinvite` issues a fresh one-time password, mails it and reactivates the account. It is the way
 back for anyone whose account has no usable password — including the accounts the identity
-migration created for employees that predated it. It returns `{ delivered, error? }` rather than
-throwing, so a send that fails still leaves a usable account and a row saying why.
+migration created for employees that predated it. It returns `{ delivered, error?,
+oneTimePassword? }` rather than throwing, on the same terms as create: a send that fails still
+leaves a usable account, a row saying why, and the password in the response.
 
 `DELETE` removes the account with the employee. Where payslips exist, both are deactivated
 instead, so payroll history keeps the person it belongs to.

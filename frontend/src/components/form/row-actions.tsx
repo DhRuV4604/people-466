@@ -16,6 +16,7 @@ import { useToast } from "@/components/ui/toast";
 import type { FieldSpec } from "@/lib/fields";
 import type { FormState } from "@/lib/mutate";
 import { RecordDialog } from "./record-dialog";
+import { WarningDialog } from "./warning-dialog";
 
 /**
  * A server action that redirects rejects its promise instead of resolving, and
@@ -74,13 +75,17 @@ export function RowActions({ edit, remove, items = [] }: RowActionsProps) {
   const [pendingConfirm, setPendingConfirm] = React.useState<RowItem | null>(
     null,
   );
+  const [warning, setWarning] = React.useState<FormState["warning"]>();
 
   const run = React.useCallback(
     (action: () => Promise<FormState>) => {
       startTransition(async () => {
         try {
           const state = await action();
-          if (state.ok) toast(state.message ?? "Done.");
+          // Same rule as the record dialog: a warning has to be dismissed,
+          // so it takes the place of the toast rather than racing it.
+          if (state.warning) setWarning(state.warning);
+          else if (state.ok) toast(state.message ?? "Done.");
           else toast(state.error ?? "That didn't work.", "error");
         } catch (error) {
           if (isRedirect(error)) throw error;
@@ -182,6 +187,11 @@ export function RowActions({ edit, remove, items = [] }: RowActionsProps) {
           onConfirm={() => run(remove.action)}
         />
       ) : null}
+
+      <WarningDialog
+        warning={warning ?? null}
+        onClose={() => setWarning(undefined)}
+      />
     </>
   );
 }

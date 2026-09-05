@@ -255,18 +255,24 @@ export class EmployeesService {
       });
     });
 
+    let invite: EmployeeDetailDto['invite'];
     if (dto.canSignIn ?? true) {
-      const invite = await this.mail.sendInvite({
+      const result = await this.mail.sendInvite({
         to: email,
         name: `${dto.firstName} ${dto.lastName}`,
         password,
         signInUrl: this.config.get<string>('signInUrl') ?? 'http://localhost:3000/login',
       });
-      if (invite.delivered) {
+      if (result.delivered) {
         await this.prisma.user.update({
           where: { id: created.userId },
           data: { invitedAt: new Date() },
         });
+        invite = { delivered: true };
+      } else {
+        // Handed back exactly once, to the person who just created the record.
+        // The alternative is an account with a password nobody holds.
+        invite = { delivered: false, error: result.error, oneTimePassword: password };
       }
     }
 
@@ -286,7 +292,7 @@ export class EmployeesService {
       (role) => !scopeToOwnRecords(role)
     );
 
-    return this.findOne(created.id, user);
+    return { ...(await this.findOne(created.id, user)), invite };
   }
 
   async update(
@@ -360,7 +366,9 @@ export class EmployeesService {
    * Reissues a one-time password and emails it again, for someone who never
    * got the first invite or has locked themselves out.
    */
-  async reinvite(id: string): Promise<{ delivered: boolean; error?: string }> {
+  async reinvite(
+    id: string
+  ): Promise<{ delivered: boolean; error?: string; oneTimePassword?: string }> {
     const employee = await this.prisma.employee.findUniqueOrThrow({
       where: { id },
       select: { userId: true, firstName: true, lastName: true, workEmail: true },
@@ -388,9 +396,12 @@ export class EmployeesService {
         where: { id: employee.userId },
         data: { invitedAt: new Date() },
       });
+      return invite;
     }
 
-    return invite;
+    // Same reasoning as create: the account is now on a password only this
+    // response holds, so returning it is what keeps the person reachable.
+    return { ...invite, oneTimePassword: password };
   }
 
   async remove(id: string): Promise<{ deleted: boolean; archived: boolean }> {

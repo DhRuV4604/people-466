@@ -14,6 +14,12 @@ import { PdfService } from './pdf.service';
 export interface SendResult {
   sent: number;
   failed: number;
+  /**
+   * Written to the outbox but not delivered, because no transport is
+   * configured. Counted apart from `sent`: a caller that cannot tell the two
+   * apart will tell someone their payslip is on its way when it is not.
+   */
+  queued: number;
 }
 
 function formatDate(date: Date): string {
@@ -61,6 +67,16 @@ export class MailService {
     return this.transport() !== 'outbox';
   }
 
+  /**
+   * Why nothing was delivered, in words an admin can act on.
+   *
+   * Recording an undelivered message as SENT was the bug this replaces: an
+   * install with no mail credentials reported every invite as delivered, so
+   * the one person who could fix it had no way to know it was broken.
+   */
+  private static readonly NO_TRANSPORT =
+    'No mail transport is configured, so nothing was delivered. Set ACS_EMAIL_CONNECTION_STRING and ACS_SENDER_ADDRESS, or SMTP_HOST, and send again.';
+
   private buildBody(params: {
     employeeName: string;
     periodStart: Date;
@@ -90,7 +106,7 @@ export class MailService {
     });
     if (!payrun) throw new NotFoundException('Pay run not found.');
 
-    const result: SendResult = { sent: 0, failed: 0 };
+    const result: SendResult = { sent: 0, failed: 0, queued: 0 };
 
     for (const payslip of payrun.payslips) {
       const employee = payslip.employee;
@@ -119,6 +135,8 @@ export class MailService {
           await this.sendViaSmtp({ to: employee.workEmail, subject, body, attachment });
         }
 
+        const delivered = transport !== 'outbox';
+
         await this.prisma.emailLog.create({
           data: {
             payslipId: payslip.id,
@@ -128,11 +146,14 @@ export class MailService {
             subject,
             body,
             attachmentName: filename,
-            status: 'SENT',
+            // QUEUED says what actually happened: written down, not sent.
+            status: delivered ? 'SENT' : 'QUEUED',
+            error: delivered ? null : MailService.NO_TRANSPORT,
           },
         });
 
-        result.sent += 1;
+        if (delivered) result.sent += 1;
+        else result.queued += 1;
       } catch (err) {
         const message = err instanceof Error ? err.message : 'Unknown error';
         this.logger.warn(`Payslip delivery failed for ${employeeName}: ${message}`);
@@ -192,8 +213,10 @@ export class MailService {
     ].join('\n');
 
     const transport = this.transport();
-    let status: 'SENT' | 'FAILED' = 'SENT';
-    let error: string | null = null;
+    let status: 'SENT' | 'QUEUED' | 'FAILED' =
+      transport === 'outbox' ? 'QUEUED' : 'SENT';
+    let error: string | null =
+      transport === 'outbox' ? MailService.NO_TRANSPORT : null;
 
     try {
       if (transport === 'acs') {
@@ -205,6 +228,12 @@ export class MailService {
       status = 'FAILED';
       error = err instanceof Error ? err.message : 'Unknown error';
       this.logger.warn(`Invite to ${params.to} failed: ${error}`);
+    }
+
+    if (status === 'QUEUED') {
+      this.logger.warn(
+        `Invite for ${params.to} was not delivered: ${MailService.NO_TRANSPORT}`
+      );
     }
 
     await this.prisma.emailLog

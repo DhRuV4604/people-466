@@ -16,6 +16,7 @@ import { useToast } from "@/components/ui/toast";
 import type { FieldSpec } from "@/lib/fields";
 import type { FormState } from "@/lib/mutate";
 import { RecordForm } from "./record-form";
+import { WarningDialog } from "./warning-dialog";
 
 export type RecordDialogProps = {
   title: string;
@@ -63,10 +64,16 @@ export function RecordDialog({
     [onOpenChange],
   );
 
+  const [warning, setWarning] = React.useState<FormState["warning"]>();
+
   const handleDone = React.useCallback(
     (state: FormState) => {
       setOpen(false);
-      if (state.message) toast(state.message);
+      // A warning replaces the toast rather than joining it: two notices for
+      // one write, one of them disappearing, is how the important half gets
+      // missed.
+      if (state.warning) setWarning(state.warning);
+      else if (state.message) toast(state.message);
     },
     [setOpen, toast],
   );
@@ -74,6 +81,7 @@ export function RecordDialog({
   const close = React.useCallback(() => setOpen(false), [setOpen]);
 
   return (
+    <>
       <Dialog open={isOpen} onOpenChange={setOpen}>
         {open === undefined ? (
           <DialogTrigger asChild>
@@ -108,5 +116,11 @@ export function RecordDialog({
           />
         </DialogContent>
       </Dialog>
+
+      <WarningDialog
+        warning={warning ?? null}
+        onClose={() => setWarning(undefined)}
+      />
+    </>
   );
 }

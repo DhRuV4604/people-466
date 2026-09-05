@@ -58,7 +58,18 @@ The provider is chosen by what is configured rather than by a flag:
 |---|---|
 | `ACS_EMAIL_CONNECTION_STRING` | Sent through Azure Communication Services. |
 | `SMTP_HOST` (and no ACS) | Sent through SMTP. Needs `npm i nodemailer -w @peoplepay360/api`. |
-| Neither | Nothing leaves. The attempt is recorded in the in-app outbox, so the bulk-send flow is demonstrable without credentials. |
+| Neither | Nothing leaves. The attempt is recorded in the outbox as `QUEUED`, with the reason on the row, so the bulk-send flow is demonstrable without credentials. |
+
+`QUEUED` exists so this last case cannot pass for success. An outbox-only install used to write
+`SENT` and report every invite as delivered, which meant the one person who could fix the missing
+credentials had no way to learn they were missing. Nothing but a real delivery is counted as one:
+`Payslip delivery` reports queued separately from sent, an invite that did not go out leaves
+`invitedAt` null, and creating an employee hands the one-time password back to whoever created
+them so the account is still reachable by hand.
+
+**Compose reads the `.env` beside `docker-compose.yml`, not `api/.env`.** A mail configuration
+in the wrong one silently resolves to empty, which is exactly the state that produces
+`QUEUED`.
 
 Either way the payslip PDF is attached, and it is generated **before** sending, so a payslip that
 cannot be rendered fails rather than arriving as an email with nothing on it.

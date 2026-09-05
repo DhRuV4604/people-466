@@ -188,6 +188,21 @@ export interface EmployeeDetailDto extends EmployeeSummaryDto {
     leaveAllocations: number;
     payslips: number;
   };
+  /**
+   * Only on the create response, and only when the invite did not go out.
+   *
+   * It carries the one-time password because nothing else can: it is stored
+   * hashed and masked in the outbox, so an install with no mail configured
+   * would otherwise leave a person with an account nobody can reach. Whoever
+   * created the employee is the one person who can pass it on by hand.
+   */
+  invite?: {
+    delivered: boolean;
+    /** Why it did not go out. Absent when it did. */
+    error?: string;
+    /** Present only when undelivered, so it is shown once and never stored. */
+    oneTimePassword?: string;
+  };
 }
 
 // ---------------------------------------------------------------- Contracts
