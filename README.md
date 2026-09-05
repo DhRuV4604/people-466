@@ -116,7 +116,7 @@ people-466/
 ## Stack
 
 NestJS 11 · Prisma 6 · PostgreSQL 16 · Next.js 16 · React 19 · TypeScript 5 ·
-Tailwind CSS 4 · Animate UI + Radix · Motion · PDFKit
+Tailwind CSS 4 · Animate UI + Radix · Motion · PDFKit · Azure Communication Services
 
 ## Seed data
 
@@ -159,6 +159,17 @@ covers each in detail.
   the actual boundary.
 - The API refuses to boot in production if `JWT_SECRET` is shorter than 32 characters.
 - Request bodies carrying unknown fields are rejected outright rather than silently stripped.
+
+## Email
+
+Payslip delivery goes through **Azure Communication Services** when
+`ACS_EMAIL_CONNECTION_STRING` and `ACS_SENDER_ADDRESS` are set, SMTP when only `SMTP_HOST` is,
+and otherwise nothing leaves — the attempt is recorded in the in-app outbox so the flow is
+demonstrable without credentials. The payslip PDF is attached either way, and every attempt lands
+in `/email-logs` with its status and, on failure, Azure's own message.
+
+The sender must be a **verified** address on the ACS domain; Azure rejects any other username.
+See [docs/operations.md](docs/operations.md#email-delivery).
 
 ## Roadmap
 

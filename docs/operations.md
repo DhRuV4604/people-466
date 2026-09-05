@@ -46,7 +46,31 @@ all. Copy `.env.example` to `.env` to change any of it.
 | `WEB_PORT` | `3000` | |
 | `NEXT_PUBLIC_API_URL` | `http://localhost:4000` | **Build-time.** Next inlines `NEXT_PUBLIC_*`, so changing it needs a rebuild, not a restart. |
 | `API_URL` | `http://api:4000` | Server-to-server, over the Compose network. Set in the compose file, not `.env`. |
-| `SMTP_*`, `MAIL_FROM` | empty | With `SMTP_HOST` empty, sending payslips records the attempt in the outbox instead of dialling out. |
+| `ACS_EMAIL_CONNECTION_STRING` | empty | Azure Communication Services. Setting it switches payslip delivery from the outbox to real sending. |
+| `ACS_SENDER_ADDRESS` | empty | Must be a **verified** sender on the ACS domain. Azure rejects any other username outright. |
+| `SMTP_*`, `MAIL_FROM` | empty | The older fallback, used only when there is no ACS connection string. |
+
+### Email delivery
+
+The provider is chosen by what is configured rather than by a flag:
+
+| Configured | What happens |
+|---|---|
+| `ACS_EMAIL_CONNECTION_STRING` | Sent through Azure Communication Services. |
+| `SMTP_HOST` (and no ACS) | Sent through SMTP. Needs `npm i nodemailer -w @peoplepay360/api`. |
+| Neither | Nothing leaves. The attempt is recorded in the in-app outbox, so the bulk-send flow is demonstrable without credentials. |
+
+Either way the payslip PDF is attached, and it is generated **before** sending, so a payslip that
+cannot be rendered fails rather than arriving as an email with nothing on it.
+
+ACS `beginSend` returns a poller, and the API waits for the operation to finish rather than for
+the request to be accepted. That is what turns a rejected sender or a bad recipient into a
+`FAILED` row in the outbox with Azure's own message, instead of a silent non-delivery recorded as
+sent.
+
+> The sender address is the usual thing to get wrong. Azure only accepts usernames configured on
+> the connected domain — `donotreply@yourdomain` typically exists, `people@yourdomain` typically
+> does not, and the error names the username it rejected.
 
 ### The two API addresses
 

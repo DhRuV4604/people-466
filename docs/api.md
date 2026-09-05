@@ -196,7 +196,12 @@ per-request cap. Duration counts only scheduled working days.
 creates nothing.
 
 The lifecycle is `DRAFT → COMPUTED → VALIDATED → PAID`. Validation is blocked while any warning
-stands. `send-payslips` returns `{ sent, failed }`.
+stands.
+
+`send-payslips` generates each PDF, attaches it, and records every attempt in `EmailLog` with its
+status and, on failure, the provider's own message. Delivery goes through Azure Communication
+Services when it is configured, SMTP when only that is, and otherwise nowhere — the attempt is
+still recorded, so the flow is demonstrable without credentials. It returns `{ sent, failed }`.
 
 The PDF is a binary stream. A browser cannot set an `Authorization` header on a plain link, so
 the web client proxies it through its own route, which reads the session cookie server-side.

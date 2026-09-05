@@ -14,6 +14,9 @@ COPY package.json package-lock.json ./
 COPY packages/shared/package.json packages/shared/
 COPY apps/api/package.json apps/api/
 COPY frontend/package.json frontend/
+# The API generates its Prisma client on install, so the schema has to be here
+# before `npm ci` rather than arriving with the rest of the sources.
+COPY apps/api/prisma apps/api/prisma
 RUN npm ci
 
 # ---------------------------------------------------------------- build

@@ -9,6 +9,8 @@ export interface AppConfig {
   };
   corsOrigins: string[];
   mail: {
+    acsConnectionString: string;
+    acsSenderAddress: string;
     host: string;
     port: number;
     user: string;
@@ -42,6 +44,18 @@ export default (): AppConfig => {
       .map((o) => o.trim())
       .filter(Boolean),
     mail: {
+      /**
+       * Delivery provider, chosen by what is configured rather than by a flag:
+       * Azure Communication Services if it has a connection string, SMTP if it
+       * has a host, otherwise nothing leaves the building and the attempt is
+       * only recorded in the outbox.
+       */
+      acsConnectionString: process.env.ACS_EMAIL_CONNECTION_STRING ?? '',
+      /**
+       * Must be a verified sender on the ACS domain. Azure rejects anything
+       * else outright, so it is worth checking before blaming the code.
+       */
+      acsSenderAddress: process.env.ACS_SENDER_ADDRESS ?? '',
       host: process.env.SMTP_HOST ?? '',
       port: Number(process.env.SMTP_PORT ?? 587),
       user: process.env.SMTP_USER ?? '',
