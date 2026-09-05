@@ -1,11 +1,12 @@
 import Link from "next/link";
-import { AlertTriangle, ArrowRight, FileWarning, Landmark } from "lucide-react";
+import { ArrowRight } from "lucide-react";
 
-import { DataTable } from "@/components/data/data-table";
 import { Fact, FactGrid, Section } from "@/components/data/primitives";
 import { StatusBadge } from "@/components/data/status-badge";
-import { Badge, Progress } from "@/components/ui";
-import { formatDate, hours, money } from "@/lib/format";
+import { Progress } from "@/components/ui";
+import { hours, money, moneyShort } from "@/lib/format";
+
+import { TrendChart } from "./trend-chart";
 
 import { getDashboard } from "../dashboard-data";
 
@@ -16,7 +17,7 @@ import { getDashboard } from "../dashboard-data";
  */
 export async function OverviewBody() {
   const data = await getDashboard();
-  const { alerts, attendance, timeOff } = data;
+  const { attendance, timeOff } = data;
 
   return (
       <div className="grid gap-6 xl:grid-cols-[minmax(0,2fr)_minmax(0,1fr)]">
@@ -41,7 +42,7 @@ export async function OverviewBody() {
                       <div className="flex items-baseline justify-between gap-4 text-sm">
                         <span className="truncate">{row.department}</span>
                         <span className="shrink-0 tabular-nums text-muted-foreground">
-                          {money(row.totalNet)}
+                          {moneyShort(row.totalNet)}
                           <span className="ml-2 text-xs">
                             {row.headcount} people
                           </span>
@@ -59,78 +60,18 @@ export async function OverviewBody() {
           </Section>
 
           <Section
-            title="Recent months"
-            description="Net salary paid and payslips issued."
+            title="Payroll over the year"
+            description="Net salary paid each month, and how many payslips it took."
           >
-            {data.monthlyTrend.length === 0 ? (
+            {data.monthlyTrend.every((m) => m.payslips === 0) ? (
               <p className="text-sm text-muted-foreground">No history yet.</p>
             ) : (
-              <DataTable
-                rows={data.monthlyTrend}
-                getKey={(row) => row.month}
-                columns={[
-                  { header: "Month", cell: (row) => row.month },
-                  {
-                    header: "Payslips",
-                    align: "right",
-                    cell: (row) => (
-                      <span className="tabular-nums">{row.payslips}</span>
-                    ),
-                  },
-                  {
-                    header: "Net salary",
-                    align: "right",
-                    cell: (row) => (
-                      <span className="tabular-nums">
-                        {money(row.netSalary)}
-                      </span>
-                    ),
-                  },
-                ]}
-              />
+              <TrendChart months={data.monthlyTrend} />
             )}
           </Section>
         </div>
 
         <div className="flex flex-col gap-6">
-          <Section
-            title="Needs attention"
-            description="Anything here will stop or distort the next pay run."
-          >
-            <div className="flex flex-col gap-4">
-              <AlertRow
-                icon={Landmark}
-                label="Missing bank details"
-                count={alerts.missingBankDetails.length}
-                href="/employees?missingBank=true"
-                names={alerts.missingBankDetails.map((a) => a.name)}
-              />
-              <AlertRow
-                icon={FileWarning}
-                label="No contract"
-                count={alerts.noContract.length}
-                href="/employees"
-                names={alerts.noContract.map((a) => a.name)}
-              />
-              <AlertRow
-                icon={AlertTriangle}
-                label="Contracts expiring"
-                count={alerts.expiringContracts.length}
-                href="/contracts?expiring=true"
-                names={alerts.expiringContracts.map(
-                  (a) => `${a.name} · ${formatDate(a.dateEnd)}`,
-                )}
-              />
-              <AlertRow
-                icon={AlertTriangle}
-                label="Duplicate payslips"
-                count={alerts.duplicatePayslips.length}
-                href="/payslips"
-                names={alerts.duplicatePayslips.map((a) => a.employee)}
-              />
-            </div>
-          </Section>
-
           <Section
             title="Attendance"
             description="Across the records held for this period."
@@ -220,45 +161,5 @@ export async function OverviewBody() {
           </Section>
         </div>
       </div>
-  );
-}
-
-function AlertRow({
-  icon: Icon,
-  label,
-  count,
-  href,
-  names,
-}: {
-  icon: React.ComponentType<{ className?: string }>;
-  label: string;
-  count: number;
-  href: string;
-  names: string[];
-}) {
-  return (
-    <div className="flex items-start gap-3">
-      <Icon
-        className={
-          count > 0
-            ? "mt-0.5 size-4 shrink-0 text-destructive"
-            : "mt-0.5 size-4 shrink-0 text-muted-foreground"
-        }
-      />
-      <div className="min-w-0 flex-1">
-        <div className="flex items-baseline justify-between gap-3">
-          <Link href={href} className="text-sm hover:underline">
-            {label}
-          </Link>
-          <Badge variant={count > 0 ? "destructive" : "outline"}>{count}</Badge>
-        </div>
-        {names.length > 0 ? (
-          <p className="mt-0.5 truncate text-xs text-muted-foreground">
-            {names.slice(0, 3).join(", ")}
-            {names.length > 3 ? ` +${names.length - 3} more` : ""}
-          </p>
-        ) : null}
-      </div>
-    </div>
   );
 }

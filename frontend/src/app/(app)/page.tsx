@@ -3,7 +3,7 @@ import type { Metadata } from "next";
 
 import { StatGrid, StatTile } from "@/components/data/primitives";
 import { OverviewSkeleton, StatsSkeleton } from "@/components/data/skeletons";
-import { moneyShort, percent } from "@/lib/format";
+import { hours, moneyShort, percent } from "@/lib/format";
 import { requireAccess } from "@/lib/access";
 
 import { getDashboard } from "./dashboard-data";
@@ -53,10 +53,13 @@ async function OverviewTasks() {
 function TaskStripSkeleton() {
   return (
     <div className="flex flex-col gap-3">
-      <div className="h-4 w-28 animate-pulse rounded bg-muted" />
-      <div className="flex gap-3">
+      <div className="h-5 w-56 animate-pulse rounded bg-muted" />
+      <div className="flex gap-4">
         {[0, 1, 2, 3].map((i) => (
-          <div key={i} className="h-[124px] w-56 shrink-0 animate-pulse rounded-2xl bg-muted" />
+          <div
+            key={i}
+            className="h-[186px] min-w-56 flex-1 animate-pulse rounded-2xl bg-muted"
+          />
         ))}
       </div>
     </div>
@@ -64,19 +67,24 @@ function TaskStripSkeleton() {
 }
 
 async function OverviewStats() {
-  const { kpis, alerts, attendance } = await getDashboard();
+  const { kpis, attendance, period } = await getDashboard();
 
-  const blocking =
-    alerts.missingBankDetails.length +
-    alerts.noContract.length +
-    alerts.duplicatePayslips.length;
+  // Deductions as a share of gross, which is the number a payroll manager is
+  // actually asked about — "where did the rest of it go".
+  const deductionShare =
+    kpis.totalGross > 0 ? (kpis.totalDeductions / kpis.totalGross) * 100 : 0;
 
   return (
     <StatGrid>
       <StatTile
         label="Net paid"
         value={moneyShort(kpis.totalNetPaid)}
-        hint={`${kpis.payslipsGenerated} payslips`}
+        hint={`${kpis.payslipsGenerated} payslips · ${period.label}`}
+      />
+      <StatTile
+        label="Cost to company"
+        value={moneyShort(kpis.totalGross)}
+        hint={`${moneyShort(kpis.totalDeductions)} deducted · ${percent(deductionShare)}`}
       />
       <StatTile
         label="Average salary"
@@ -86,14 +94,8 @@ async function OverviewStats() {
       <StatTile
         label="Attendance health"
         value={percent(kpis.attendanceHealth)}
-        hint={`${attendance.totalRecords} records`}
+        hint={`${attendance.totalRecords} records · ${hours(attendance.totalOvertimeHours)} overtime`}
         tone={kpis.attendanceHealth < 80 ? "danger" : "neutral"}
-      />
-      <StatTile
-        label="Needs attention"
-        value={blocking}
-        hint={blocking === 0 ? "Nothing blocking" : "Before the next pay run"}
-        tone={blocking > 0 ? "danger" : "neutral"}
       />
     </StatGrid>
   );

@@ -61,9 +61,16 @@ export class DashboardService {
     const now = new Date();
     const horizon = new Date(now.getTime() + 30 * 86400000);
 
+    // A payslip belongs to the month its period *ends* in.
+    //
+    // Payroll periods straddle month boundaries as a matter of course - a run
+    // from 31 July to 31 August is ordinary - so requiring one to sit entirely
+    // inside a month excluded exactly those, and the dashboard opened on "the
+    // latest month with payroll" only to report that month as having none.
+    // Overlap is the other extreme: two runs touch July, so July would show
+    // twice its own payroll. The end date is what a run is named for.
     const payslipFilter: Prisma.PayslipWhereInput = {
-      periodStart: { gte: filters.periodStart },
-      periodEnd: { lte: filters.periodEnd },
+      periodEnd: { gte: filters.periodStart, lte: filters.periodEnd },
       status: { not: 'CANCELLED' },
       ...relatedEmployeeFilter,
     };
@@ -101,6 +108,7 @@ export class DashboardService {
           id: true,
           firstName: true,
           lastName: true,
+          avatarId: true,
           employeeType: true,
           departmentId: true,
           bankName: true,
@@ -134,10 +142,7 @@ export class DashboardService {
       }),
       this.prisma.department.findMany(),
       this.prisma.payrun.findMany({
-        where: {
-          periodStart: { gte: filters.periodStart },
-          periodEnd: { lte: filters.periodEnd },
-        },
+        where: { periodEnd: { gte: filters.periodStart, lte: filters.periodEnd } },
       }),
       // These three depend on nothing else in the batch, so they belong in it
       // rather than as separate awaits further down.
@@ -152,7 +157,8 @@ export class DashboardService {
         select: {
           id: true,
           dateEnd: true,
-          employee: { select: { firstName: true, lastName: true } },
+          employeeId: true,
+          employee: { select: { firstName: true, lastName: true, avatarId: true } },
         },
         orderBy: { dateEnd: 'asc' },
       }),
@@ -165,12 +171,11 @@ export class DashboardService {
       }),
       this.prisma.payslip.findMany({
         where: {
-          periodStart: { gte: trendStart },
-          periodEnd: { lte: endOfMonth(filters.periodEnd) },
+          periodEnd: { gte: trendStart, lte: endOfMonth(filters.periodEnd) },
           status: { not: 'CANCELLED' },
           ...relatedEmployeeFilter,
         },
-        select: { periodStart: true, netPay: true },
+        select: { periodEnd: true, netPay: true },
       }),
       // Accounts that exist but have never been asked to sign in. The identity
       // migration created these, and nothing else on the dashboard surfaces
@@ -182,6 +187,7 @@ export class DashboardService {
           id: true,
           firstName: true,
           lastName: true,
+          avatarId: true,
           department: { select: { name: true } },
         },
         take: 20,
@@ -191,7 +197,8 @@ export class DashboardService {
         select: {
           id: true,
           title: true,
-          employee: { select: { firstName: true, lastName: true } },
+          employeeId: true,
+          employee: { select: { firstName: true, lastName: true, avatarId: true } },
         },
         orderBy: { sentAt: 'asc' },
         take: 20,
@@ -205,7 +212,8 @@ export class DashboardService {
         select: {
           id: true,
           checkIn: true,
-          employee: { select: { firstName: true, lastName: true } },
+          employeeId: true,
+          employee: { select: { firstName: true, lastName: true, avatarId: true } },
         },
         orderBy: { checkIn: 'desc' },
         take: 20,
@@ -261,7 +269,7 @@ export class DashboardService {
       const mEnd = endOfMonth(monthDate);
 
       const inMonth = trendPayslips.filter(
-        (p) => p.periodStart >= mStart && p.periodStart <= mEnd
+        (p) => p.periodEnd >= mStart && p.periodEnd <= mEnd
       );
 
       monthlyTrend.push({
@@ -295,6 +303,8 @@ export class DashboardService {
         id: e.id,
         name: `${e.firstName} ${e.lastName}`,
         department: e.department?.name ?? '—',
+        avatarFileId: e.avatarId,
+        employeeId: e.id,
       }));
 
     const noContract = employees
@@ -305,12 +315,16 @@ export class DashboardService {
         id: e.id,
         name: `${e.firstName} ${e.lastName}`,
         department: e.department?.name ?? '—',
+        avatarFileId: e.avatarId,
+        employeeId: e.id,
       }));
 
     const expiringContracts = expiring.map((c) => ({
       id: c.id,
       name: `${c.employee.firstName} ${c.employee.lastName}`,
       dateEnd: c.dateEnd?.toISOString() ?? null,
+      avatarFileId: c.employee.avatarId,
+      employeeId: c.employeeId,
     }));
 
     // Duplicates: one employee holding more than one payslip for the same month.
@@ -338,24 +352,38 @@ export class DashboardService {
     // how much trouble ignoring one causes. Leave sits first because somebody
     // is waiting on an answer; a draft pay run sits above an expiring contract
     // because it blocks this month rather than next quarter.
+    const byId = new Map(employees.map((e) => [e.id, e]));
+
     const pendingLeave = leaveRequests
       .filter((r) => r.status === 'TO_APPROVE')
       .slice(0, 20)
-      .map((r) => ({
-        id: r.id,
-        name: employees.find((e) => e.id === r.employeeId)
-          ? `${employees.find((e) => e.id === r.employeeId)!.firstName} ${employees.find((e) => e.id === r.employeeId)!.lastName}`
-          : r.type.name,
-        detail: `${r.type.name} · ${r.dateFrom.toISOString().slice(0, 10)} to ${r.dateTo.toISOString().slice(0, 10)}`,
-      }));
+      .map((r) => {
+        const person = byId.get(r.employeeId);
+        return {
+          id: r.id,
+          name: person ? `${person.firstName} ${person.lastName}` : r.type.name,
+          detail: `${r.type.name} · ${r.dateFrom.toISOString().slice(0, 10)} to ${r.dateTo.toISOString().slice(0, 10)}`,
+          avatarFileId: person?.avatarId ?? null,
+          employeeId: person?.id ?? null,
+        };
+      });
 
     const subjectsOf = (
-      rows: { id: string; name: string; department?: string; detail?: string | null }[]
+      rows: {
+        id: string;
+        name: string;
+        department?: string;
+        detail?: string | null;
+        avatarFileId?: string | null;
+        employeeId?: string | null;
+      }[]
     ) =>
       rows.slice(0, 20).map((r) => ({
         id: r.id,
         name: r.name,
         detail: r.detail ?? r.department ?? null,
+        avatarFileId: r.avatarFileId ?? null,
+        employeeId: r.employeeId ?? null,
       }));
 
     const tasks: DashboardTask[] = [
@@ -369,6 +397,8 @@ export class DashboardService {
           id: e.id,
           name: `${e.firstName} ${e.lastName}`,
           detail: e.department?.name ?? null,
+          avatarFileId: e.avatarId,
+          employeeId: e.id,
         })),
       },
       {
@@ -378,6 +408,10 @@ export class DashboardService {
           id: d.id,
           name: d.title,
           detail: `${d.employee.firstName} ${d.employee.lastName}`,
+          // The document is the subject, but the face is the person waiting to
+          // sign it - which is who the card is really about.
+          avatarFileId: d.employee.avatarId,
+          employeeId: d.employeeId,
         })),
       },
       {
@@ -392,6 +426,8 @@ export class DashboardService {
           id: c.id,
           name: c.name,
           detail: c.dateEnd ? `ends ${c.dateEnd.slice(0, 10)}` : null,
+          avatarFileId: c.avatarFileId,
+          employeeId: c.employeeId,
         })),
       },
       {
@@ -401,6 +437,8 @@ export class DashboardService {
           id: a.id,
           name: `${a.employee.firstName} ${a.employee.lastName}`,
           detail: `checked in ${a.checkIn.toISOString().slice(0, 10)}`,
+          avatarFileId: a.employee.avatarId,
+          employeeId: a.employeeId,
         })),
       },
       // Nothing to do is worth saying, so the empty ones are dropped here
@@ -461,11 +499,13 @@ export class DashboardService {
 
   /** The most recent month that actually has payroll, for a sensible default view. */
   async getLatestPayrollMonth(): Promise<string | null> {
+    // Keyed on the end date, to agree with how a payslip is assigned to a
+    // month everywhere else here.
     const latest = await this.prisma.payslip.findFirst({
-      orderBy: { periodStart: 'desc' },
-      select: { periodStart: true },
+      orderBy: { periodEnd: 'desc' },
+      select: { periodEnd: true },
     });
     if (!latest) return null;
-    return latest.periodStart.toISOString().slice(0, 7);
+    return latest.periodEnd.toISOString().slice(0, 7);
   }
 }

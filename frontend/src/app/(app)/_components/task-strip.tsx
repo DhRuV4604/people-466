@@ -24,7 +24,6 @@ import type {
 } from "@peoplepay360/shared";
 
 import {
-  Badge,
   Button,
   Dialog,
   DialogContent,
@@ -36,7 +35,9 @@ import {
   Input,
   Textarea,
 } from "@/components/ui";
+import { UserAvatar } from "@/components/ui/profile";
 import { buttonVariants } from "@/components/ui/button-variants";
+import { avatarUrl } from "@/lib/avatar";
 import { useToast } from "@/components/ui/toast";
 import type { FormState } from "@/lib/form-state";
 import { cn } from "@/lib/utils";
@@ -131,10 +132,33 @@ const TASKS: Record<
   },
 };
 
+/**
+ * Kinds where a face means something.
+ *
+ * Not always the subject itself: a document waiting to be signed is a document,
+ * but the card is really about the person who has not signed it. A pay run is
+ * the one thing here with nobody behind it.
+ */
+const PEOPLE_TASKS = new Set<DashboardTaskKind>([
+  'PENDING_LEAVE',
+  'MISSING_BANK',
+  'NO_CONTRACT',
+  'NEVER_INVITED',
+  'EXPIRING_CONTRACT',
+  'MISSING_CHECKOUT',
+  'AWAITING_SIGNATURE',
+]);
+
 const TONES = {
   urgent: "bg-destructive/10 text-destructive",
   warn: "bg-primary/10 text-primary",
   info: "bg-muted text-muted-foreground",
+} as const;
+
+const ACCENTS = {
+  urgent: "bg-destructive",
+  warn: "bg-primary",
+  info: "bg-border",
 } as const;
 
 /** Runs an action and reports it, so every row behaves the same way. */
@@ -395,41 +419,119 @@ function TaskCard({ task, period }: { task: DashboardTask; period: string }) {
   const [open, setOpen] = React.useState(false);
   const Icon = spec.icon;
 
+  // The first subject is named in full; the rest are a row of faces. A pay run
+  // has no face, so it gets the name alone.
+  const next = task.subjects[0] ?? null;
+  const rest = PEOPLE_TASKS.has(task.kind) ? task.subjects.slice(1, 4) : [];
+
   return (
     <>
       <button
         type="button"
         onClick={() => setOpen(true)}
-        className={cn(
-          "group flex w-56 shrink-0 flex-col gap-3 rounded-2xl border border-border bg-card p-4 text-left",
-          "transition-colors outline-none hover:bg-muted/40",
-          "focus-visible:ring-[3px] focus-visible:ring-ring",
-        )}
+        className="group h-full min-w-52 flex-1 text-left outline-none"
       >
-        <div className="flex items-center justify-between">
+        {/* The stack is the row of faces, not the card. Layered cards behind
+            this one only looked like a rendering fault. */}
+        <span
+          className={cn(
+            "relative flex h-full flex-col gap-2.5 overflow-hidden rounded-2xl border border-border bg-card p-3.5",
+            "transition-all duration-200 group-hover:-translate-y-0.5 group-hover:shadow-lg",
+            "group-focus-visible:ring-[3px] group-focus-visible:ring-ring",
+          )}
+        >
+          {/* A hairline of the tone across the top, so urgency reads before
+              the words do. */}
           <span
-            className={cn(
-              "flex size-9 items-center justify-center rounded-xl",
-              TONES[spec.tone],
-            )}
-          >
-            <Icon className="size-4" />
+            aria-hidden
+            className={cn("absolute inset-x-0 top-0 h-0.5", ACCENTS[spec.tone])}
+          />
+
+          <span className="flex items-start justify-between gap-3">
+            <span
+              className={cn(
+                "flex size-9 items-center justify-center rounded-xl",
+                TONES[spec.tone],
+              )}
+            >
+              <Icon className="size-4" />
+            </span>
+            <span
+              className={cn(
+                "text-xl leading-none font-semibold tabular-nums",
+                spec.tone === "urgent" ? "text-destructive" : "text-foreground",
+              )}
+            >
+              {task.count}
+            </span>
           </span>
-          <Badge variant={spec.tone === "urgent" ? "destructive" : "secondary"}>
-            {task.count}
-          </Badge>
-        </div>
 
-        <div className="min-w-0">
-          <p className="truncate text-sm font-medium">{spec.label}</p>
-          <p className="truncate text-xs text-muted-foreground">
-            {spec.blurb(period)}
-          </p>
-        </div>
+          <span className="min-w-0">
+            <span className="block truncate text-sm font-medium">
+              {spec.label}
+            </span>
+            <span className="block truncate text-xs text-muted-foreground">
+              {spec.blurb(period)}
+            </span>
+          </span>
 
-        <span className="inline-flex items-center gap-1 text-xs font-medium text-primary">
-          {spec.action}
-          <ChevronRight className="size-3.5 transition-transform group-hover:translate-x-0.5" />
+          {/* The one at the front of the queue, named. A count tells you there
+              is work; this tells you what the work is, which is the difference
+              between a card you read and a card you act on. */}
+          {next ? (
+            <span className="flex min-w-0 items-center gap-2 rounded-xl bg-muted/50 p-2">
+              {PEOPLE_TASKS.has(task.kind) ? (
+                <UserAvatar
+                  size="sm"
+                  name={next.name}
+                  src={avatarUrl(next.employeeId ?? next.id, next.avatarFileId)}
+                />
+              ) : null}
+              <span className="min-w-0 flex-1">
+                <span className="block truncate text-xs font-medium">
+                  {next.name}
+                </span>
+                {next.detail ? (
+                  <span className="block truncate text-[11px] text-muted-foreground">
+                    {next.detail}
+                  </span>
+                ) : null}
+              </span>
+            </span>
+          ) : null}
+
+          <span className="mt-auto flex items-center justify-between gap-2">
+            {rest.length > 0 ? (
+              <span className="flex items-center gap-1.5">
+                <span className="flex -space-x-2">
+                  {rest.map((subject) => (
+                    <UserAvatar
+                      key={subject.id}
+                      size="sm"
+                      name={subject.name}
+                      src={avatarUrl(
+                        subject.employeeId ?? subject.id,
+                        subject.avatarFileId,
+                      )}
+                      className="ring-2 ring-card"
+                    />
+                  ))}
+                </span>
+                {task.count > rest.length + 1 ? (
+                  <span className="text-xs text-muted-foreground">
+                    +{task.count - rest.length - 1}
+                  </span>
+                ) : null}
+              </span>
+            ) : (
+              <span />
+            )}
+
+            <span className="inline-flex items-center gap-1 text-xs font-medium text-primary">
+              {spec.action}
+              <ChevronRight className="size-3.5 transition-transform group-hover:translate-x-0.5" />
+            </span>
+          </span>
         </span>
       </button>
 
@@ -484,7 +586,7 @@ export function TaskStrip({
           <Check className="size-4" />
         </span>
         <div>
-          <p className="text-sm font-medium">Nothing needs you</p>
+          <p className="text-sm font-medium">Your desk is clear</p>
           <p className="text-xs text-muted-foreground">
             No approvals waiting, and nothing blocking {period}.
           </p>
@@ -493,17 +595,22 @@ export function TaskStrip({
     );
   }
 
+  const total = tasks.reduce((sum, task) => sum + task.count, 0);
+
   return (
     <section className="flex flex-col gap-3">
-      <h2 className="text-sm font-medium text-muted-foreground">
-        Needs you first{" "}
-        <span className="font-normal text-muted-foreground/70">· {period}</span>
-      </h2>
+      <div className="flex flex-wrap items-baseline gap-x-2.5 gap-y-1">
+        <h2 className="text-base font-semibold tracking-tight">On your desk</h2>
+        <span className="text-sm text-muted-foreground">
+          {total === 1 ? "1 thing" : `${total} things`} to sort out
+        </span>
+        <span className="text-sm text-muted-foreground/60">· {period}</span>
+      </div>
       {/* Scrolls sideways rather than wrapping: the cards are ordered by
           urgency, and wrapping would put the least urgent one beside the most.
           overflow-y is pinned because the spec promotes it to `auto` as soon as
           the other axis is not visible. */}
-      <div className="scrollbar-thin -mx-1 flex gap-3 overflow-x-auto overflow-y-hidden px-1 pb-1">
+      <div className="scrollbar-thin -mx-1 -mt-2 flex items-stretch gap-4 overflow-x-auto overflow-y-hidden px-1 pt-2 pb-1">
         {tasks.map((task) => (
           <TaskCard key={task.kind} task={task} period={period} />
         ))}

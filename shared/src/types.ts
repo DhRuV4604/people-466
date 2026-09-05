@@ -490,6 +490,13 @@ export interface DashboardTaskSubject {
   name: string;
   /** One line of context — a department, a date range, a status. */
   detail: string | null;
+  /**
+   * The person's picture, where the subject is a person and one is set. Sent
+   * alongside so a card can show faces without a request per row.
+   */
+  avatarFileId?: string | null;
+  /** The employee the picture belongs to, when `id` is not them. */
+  employeeId?: string | null;
 }
 
 export interface DashboardTask {
