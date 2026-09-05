@@ -25,10 +25,17 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
    * immediately rather than when the token happens to expire.
    */
   async validate(payload: JwtPayload): Promise<AuthenticatedUser> {
-    const user = await this.prisma.user.findUnique({
-      where: { id: payload.sub },
-      include: { employee: { select: { id: true } } },
-    });
+    // A signed token whose subject is not a well-formed id is still a token
+    // nobody can be behind. Left to Prisma it raises P2023 and leaves the
+    // client a 400 to puzzle over, when what it needs to hear is "sign in
+    // again" — which is what a session issued before the ids changed shape is
+    // actually being told.
+    const user = await this.prisma.user
+      .findUnique({
+        where: { id: payload.sub },
+        include: { employee: { select: { id: true } } },
+      })
+      .catch(() => null);
 
     if (!user || !user.active) {
       throw new UnauthorizedException('Account is no longer active.');

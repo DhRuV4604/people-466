@@ -116,8 +116,9 @@ the personal, bank and relation-id fields plus related-record counts.
 
 `POST /employees` also creates the sign-in account, in one transaction with the employee — there
 is no separate step and no way to end up with one without the other. It generates a one-time
-password, mails it, and records the attempt in the outbox with the password masked. `canSignIn:
-false` creates the account inactive and sends nothing.
+password, mails it, and records the attempt in the outbox with the password masked. There is no
+opt-out: everyone on the payroll gets an account and an invite, because a person who cannot sign
+in is a support ticket rather than a configuration.
 
 The create response carries `invite`. When the mail could not be delivered — no transport
 configured, or the send failed — it reports `delivered: false` with the reason **and the

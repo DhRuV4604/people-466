@@ -1,4 +1,5 @@
 import { cookies } from "next/headers";
+import { redirect } from "next/navigation";
 
 /**
  * Server-side HTTP client for the PeoplePay360 API.
@@ -42,6 +43,13 @@ type RequestOptions = {
   anonymous?: boolean;
   /** Return null instead of throwing when the API responds 404. */
   nullOn404?: boolean;
+  /**
+   * Hand a 401 back to the caller instead of clearing the session.
+   *
+   * Only for the calls whose whole job is to find out whether the session is
+   * still good: they have to see the refusal, not be redirected by it.
+   */
+  allowUnauthorized?: boolean;
   /**
    * Bearer token supplied by the caller instead of read from the cookie store.
    *
@@ -103,6 +111,7 @@ export async function apiFetch<T>(
     query,
     anonymous,
     nullOn404,
+    allowUnauthorized,
     token: explicitToken,
     cache,
     revalidate,
@@ -130,6 +139,13 @@ export async function apiFetch<T>(
     // The API being down is an expected condition in local development, so it
     // surfaces as an ApiError the caller can render rather than a crash.
     throw new ApiError(503, "Cannot reach the API. Is it running?");
+  }
+
+  // A rejected token cannot be recovered from by retrying, and every page on
+  // the way to rendering would fail the same way. Clearing it and asking for a
+  // sign-in is the only useful response.
+  if (response.status === 401 && !anonymous && !allowUnauthorized) {
+    redirect("/signed-out");
   }
 
   if (response.status === 404 && nullOn404) return null as T;

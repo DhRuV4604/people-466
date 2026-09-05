@@ -68,7 +68,7 @@ export async function getSession(): Promise<AuthUser | null> {
  */
 export async function verifySession(): Promise<AuthUser | null> {
   try {
-    return await apiFetch<AuthUser>("/auth/me");
+    return await apiFetch<AuthUser>("/auth/me", { allowUnauthorized: true });
   } catch (error) {
     if (error instanceof ApiError && error.status === 401) return null;
     throw error;

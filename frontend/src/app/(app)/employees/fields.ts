@@ -101,14 +101,7 @@ export function employeeFields(refs?: Partial<Refs>): FieldSpec[] {
       type: "select",
       options: ROLES.map((role) => ({ value: role, label: ROLE_LABELS[role] })),
       defaultValue: "EMPLOYEE",
-      hint: "What they can reach. Most people are an Employee.",
-    },
-    {
-      name: "canSignIn",
-      label: "Can sign in",
-      type: "switch",
-      defaultValue: true,
-      hint: "On sends an invite with a one-time password. Off records the person without one.",
+      hint: "What they can reach. Most people are an Employee. Everyone gets an invite to sign in.",
     },
   ];
 }

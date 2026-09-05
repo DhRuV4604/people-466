@@ -112,13 +112,6 @@ export class CreateEmployeeDto {
   @IsEnum(ROLES as unknown as object)
   role?: Role;
 
-  @ApiPropertyOptional({
-    default: true,
-    description: 'Whether the account is usable. Off creates the person without inviting them.',
-  })
-  @IsOptional()
-  @IsBoolean()
-  canSignIn?: boolean;
 }
 
 export class UpdateEmployeeDto extends PartialType(CreateEmployeeDto) {}

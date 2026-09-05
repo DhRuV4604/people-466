@@ -225,7 +225,7 @@ export class EmployeesService {
           email,
           name: `${dto.firstName} ${dto.lastName}`,
           role: dto.role ?? 'EMPLOYEE',
-          active: dto.canSignIn ?? true,
+          active: true,
           passwordHash,
           mustChangePassword: true,
         },
@@ -255,8 +255,11 @@ export class EmployeesService {
       });
     });
 
+    // Everyone gets an account and an invite. A person on the payroll who
+    // cannot sign in is a support ticket waiting to happen, and the toggle
+    // that used to allow it only ever produced one by accident.
     let invite: EmployeeDetailDto['invite'];
-    if (dto.canSignIn ?? true) {
+    {
       const result = await this.mail.sendInvite({
         to: email,
         name: `${dto.firstName} ${dto.lastName}`,
@@ -349,7 +352,6 @@ export class EmployeesService {
     }
     if (dto.workEmail !== undefined) account.email = dto.workEmail.toLowerCase();
     if (dto.role !== undefined) account.role = dto.role;
-    if (dto.canSignIn !== undefined) account.active = dto.canSignIn;
 
     if (Object.keys(account).length > 0) {
       const { userId } = await this.prisma.employee.findUniqueOrThrow({
