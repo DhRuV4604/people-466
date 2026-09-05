@@ -24,7 +24,7 @@ export function StatTile({
   return (
     <div
       className={cn(
-        "rounded-xl border border-border bg-card p-4 sm:p-5",
+        "rounded-xl border border-border bg-card p-5",
         tone === "accent" && "border-primary/30 bg-primary/[0.03]",
         tone === "danger" && "border-destructive/30 bg-destructive/[0.03]",
       )}
@@ -32,7 +32,7 @@ export function StatTile({
       <p className="text-xs text-muted-foreground">{label}</p>
       <p
         className={cn(
-          "mt-1 text-xl font-semibold tracking-tight tabular-nums sm:text-2xl",
+          "mt-1 text-2xl font-semibold tracking-tight tabular-nums",
           tone === "danger" && "text-destructive",
         )}
       >
@@ -47,7 +47,7 @@ export function StatTile({
 
 export function StatGrid({ children }: { children: React.ReactNode }) {
   return (
-    <div className="grid grid-cols-2 gap-3 sm:gap-4 xl:grid-cols-4">{children}</div>
+    <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">{children}</div>
   );
 }
 
@@ -63,7 +63,7 @@ export function EmptyState({
   action?: React.ReactNode;
 }) {
   return (
-    <div className="flex flex-col items-center gap-3 rounded-xl border border-dashed border-border px-6 py-12 text-center sm:p-16">
+    <div className="flex flex-col items-center gap-3 rounded-xl border border-dashed border-border p-16 text-center">
       <Icon className="size-7 text-muted-foreground" />
       <p className="font-medium">{title}</p>
       {description ? (
@@ -89,7 +89,7 @@ export function Section({
 }) {
   return (
     <Card className={className}>
-      <CardHeader className="flex-col items-start gap-3 space-y-0 sm:flex-row sm:justify-between sm:gap-4">
+      <CardHeader className="flex-row items-start justify-between gap-4 space-y-0">
         <div className="min-w-0">
           <CardTitle>{title}</CardTitle>
           {description ? (

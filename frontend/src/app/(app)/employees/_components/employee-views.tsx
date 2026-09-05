@@ -72,7 +72,7 @@ export function EmployeeList({ employees, canDelete }: ViewProps) {
         // sit inside without nesting one control in another.
         <li
           key={employee.id}
-          className="relative flex flex-wrap items-center gap-x-3 gap-y-2 p-4 transition-colors hover:bg-muted/40 focus-within:bg-muted/40 sm:flex-nowrap sm:gap-4"
+          className="relative flex items-center gap-4 p-4 transition-colors hover:bg-muted/40 focus-within:bg-muted/40"
         >
           <Link
             href={`/employees/${employee.id}`}
@@ -83,18 +83,11 @@ export function EmployeeList({ employees, canDelete }: ViewProps) {
 
           <UserAvatar name={employee.fullName} />
 
-          {/* basis-0 with a min width: the name column is what gives way when
-              the badges beside it need room, rather than the row growing. */}
-          <div className="min-w-0 flex-1 basis-40">
+          <div className="min-w-0 flex-1">
             <p className="truncate text-sm font-medium">{employee.fullName}</p>
             <p className="truncate text-xs text-muted-foreground">
               {employee.jobPosition?.name ?? "No position"} ·{" "}
               {employee.workEmail}
-            </p>
-            {/* The code has no column of its own until md, so on a phone it
-                rides under the name rather than disappearing. */}
-            <p className="mt-0.5 font-mono text-xs text-muted-foreground md:hidden">
-              {employee.employeeCode}
             </p>
           </div>
 
@@ -137,7 +130,7 @@ export function EmployeeCards({ employees, canDelete }: ViewProps) {
               <span className="sr-only">Open {employee.fullName}</span>
             </Link>
 
-            <div className="flex h-full flex-col gap-4 p-4 sm:p-5">
+            <div className="flex h-full flex-col gap-4 p-5">
               <div className="flex items-start gap-3">
                 <UserAvatar name={employee.fullName} size="lg" />
                 <div className="min-w-0 flex-1">
@@ -149,12 +142,8 @@ export function EmployeeCards({ employees, canDelete }: ViewProps) {
                     {employee.employeeCode}
                   </p>
                 </div>
-                {/* The badge and the menu share a column so a long status
-                    wraps under the menu instead of squeezing the name. */}
-                <div className="flex shrink-0 items-start gap-1">
-                  <StatusBadge employee={employee} />
-                  {canDelete ? <DeleteMenu employee={employee} /> : null}
-                </div>
+                <StatusBadge employee={employee} />
+                {canDelete ? <DeleteMenu employee={employee} /> : null}
               </div>
 
               <dl className="flex flex-col gap-2 text-xs text-muted-foreground">
@@ -186,7 +175,7 @@ export function EmployeeCards({ employees, canDelete }: ViewProps) {
                 </div>
               </dl>
 
-              <div className="mt-auto flex flex-wrap items-center gap-2 border-t border-border pt-4">
+              <div className="mt-auto flex items-center gap-2 border-t border-border pt-4">
                 <Badge variant="outline">
                   {EMPLOYEE_TYPE_LABELS[employee.employeeType]}
                 </Badge>

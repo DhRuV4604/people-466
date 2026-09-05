@@ -57,7 +57,7 @@ export function DataTable<T>({
   return (
     <div
       className={cn(
-        "w-full max-w-full overflow-x-auto overscroll-x-contain rounded-xl border border-border bg-card",
+        "overflow-x-auto rounded-xl border border-border bg-card",
         className,
       )}
     >
@@ -69,7 +69,7 @@ export function DataTable<T>({
                 key={index}
                 scope="col"
                 className={cn(
-                  "px-3 py-3 text-left text-xs font-medium whitespace-nowrap text-muted-foreground sm:px-4",
+                  "px-4 py-3 text-left text-xs font-medium whitespace-nowrap text-muted-foreground",
                   column.align === "right" && "text-right",
                   column.hideBelow && HIDE[column.hideBelow],
                   column.className,
@@ -92,7 +92,7 @@ export function DataTable<T>({
                   <td
                     key={index}
                     className={cn(
-                      "px-3 py-3 align-middle sm:px-4",
+                      "px-4 py-3 align-middle",
                       column.align === "right" && "text-right",
                       column.hideBelow && HIDE[column.hideBelow],
                       column.className,

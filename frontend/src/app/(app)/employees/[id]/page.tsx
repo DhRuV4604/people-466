@@ -179,7 +179,7 @@ export default async function EmployeePage({ params }: PageProps) {
       <div className="grid gap-6 lg:grid-cols-[320px_minmax(0,1fr)]">
         <div className="flex flex-col gap-6">
           <Card>
-            <CardHeader className="flex-wrap items-start gap-4">
+            <CardHeader className="items-start gap-4">
               <UserAvatar name={employee.fullName} size="lg" />
               <div className="min-w-0">
                 <CardTitle>{employee.fullName}</CardTitle>
@@ -285,10 +285,10 @@ export default async function EmployeePage({ params }: PageProps) {
               </CardDescription>
             </CardHeader>
             <CardContent>
-              <dl className="grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-5">
+              <dl className="grid grid-cols-2 gap-4 sm:grid-cols-5">
                 {activity.map((item) => (
                   <div key={item.label}>
-                    <dd className="text-xl font-semibold tabular-nums sm:text-2xl">
+                    <dd className="text-2xl font-semibold tabular-nums">
                       {item.value}
                     </dd>
                     <dt className="text-xs text-muted-foreground">

@@ -66,18 +66,6 @@ export type FieldSpec = {
   autoComplete?: string;
   /** Hidden on the edit form, e.g. a password that is only set on create. */
   createOnly?: boolean;
-  /**
-   * Fixed to `defaultValue` and shown as plain text rather than a control.
-   *
-   * An Employee only ever files against their own record, so the picker of
-   * other people is not a choice they have: locking the field states who the
-   * record is for instead of offering a list with one usable entry. The value
-   * still posts, and the API re-derives it either way, so this is presentation
-   * rather than enforcement.
-   */
-  locked?: boolean;
-  /** What a locked field shows in place of the raw value. */
-  lockedLabel?: string;
 };
 
 export type FieldValues = Record<string, unknown>;
@@ -96,40 +84,6 @@ export type RefName =
   | "timeOffTypes";
 
 export type Refs = Record<RefName, FieldOption[]>;
-
-/**
- * The signed-in user's own employee record, when a role only ever files
- * against itself. Passed to a field spec so the employee field becomes a
- * statement of who the record is for rather than a picker.
- */
-export type SelfEmployee = { id: string; label: string };
-
-/**
- * The employee field, as the viewer should see it: a picker for anyone who
- * files on behalf of others, a locked line for anyone who cannot.
- *
- * Declared here rather than in each module's field list so attendance,
- * requests and allocations cannot drift apart on what an employee sees.
- */
-export function employeeField(
-  spec: Omit<FieldSpec, "type" | "options">,
-  refs?: Partial<Refs>,
-  self?: SelfEmployee | null,
-): FieldSpec {
-  if (self) {
-    return {
-      ...spec,
-      type: "select",
-      options: [{ value: self.id, label: self.label }],
-      defaultValue: self.id,
-      locked: true,
-      lockedLabel: self.label,
-      hint: spec.hint ?? "Filed against your own record.",
-    };
-  }
-
-  return { ...spec, type: "select", options: refs?.employees };
-}
 
 /**
  * A select has no empty state of its own, so a clearable one gets this as its
