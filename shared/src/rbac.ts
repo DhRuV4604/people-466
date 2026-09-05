@@ -44,7 +44,10 @@ const employeeMatrix: RoleMatrix = {
   timeOffAllocations: READ,
   timeOffTypes: READ,
   payruns: NONE,
-  payslips: NONE,
+  // Their own only. The payslip service and the PDF route both narrow an
+  // employee to rows carrying their employeeId, so this grant reaches exactly
+  // what the API already lets through inline.
+  payslips: READ,
   salaryStructures: NONE,
   salaryRules: NONE,
   dashboard: NONE,

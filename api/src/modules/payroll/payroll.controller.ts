@@ -12,7 +12,7 @@ import {
 } from '@nestjs/common';
 import { ApiBearerAuth, ApiOperation, ApiTags, ApiProduces } from '@nestjs/swagger';
 import type { Response } from 'express';
-import { can } from '@peoplepay360/shared';
+import { can, scopeToOwnRecords } from '@peoplepay360/shared';
 import { PayrunsService } from './payruns.service';
 import { PayslipsService } from './payslips.service';
 import { SalaryConfigService } from './salary-config.service';
@@ -137,8 +137,12 @@ export class PayslipsController {
   }
 
   /**
-   * Not annotated with @RequirePermission: an employee has no payslips
-   * permission yet must be able to print their own, so the check is inline.
+   * Not annotated with @RequirePermission, because the permission alone is not
+   * the question: a role scoped to its own records holds payslips:read so it
+   * can reach its own payslips, and reading that grant as "may print anyone's"
+   * would hand every employee the whole payroll. Ownership decides for those
+   * roles; the grant decides for everyone else. This mirrors the same test in
+   * PayslipsService.findOne.
    */
   @Get(':id/pdf')
   @ApiProduces('application/pdf')
@@ -154,8 +158,9 @@ export class PayslipsController {
     });
     if (!payslip) throw new ForbiddenException('Payslip not found.');
 
-    const allowed =
-      can(user.role, 'payslips', 'read') || user.employeeId === payslip.employeeId;
+    const allowed = scopeToOwnRecords(user.role)
+      ? user.employeeId === payslip.employeeId
+      : can(user.role, 'payslips', 'read');
     if (!allowed) throw new ForbiddenException('Not authorized to view this payslip.');
 
     const { buffer, filename } = await this.pdf.generatePayslip(id);

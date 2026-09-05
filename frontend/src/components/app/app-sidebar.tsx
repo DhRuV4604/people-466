@@ -14,6 +14,7 @@ import {
   ScrollText,
   Settings,
   Sliders,
+  Smile,
   UserRound,
   UsersRound,
   Wallet,
@@ -286,6 +287,14 @@ export function AppSidebar({
                   <UserRound />
                   My profile
                 </DropdownMenuLinkItem>
+                {/* Only an account tied to an employee record has attendance,
+                    leave and payslips of its own to see. */}
+                {user.employeeId ? (
+                  <DropdownMenuLinkItem href="/me">
+                    <Smile />
+                    My space
+                  </DropdownMenuLinkItem>
+                ) : null}
                 <DropdownMenuSeparator />
                 <DropdownMenuItem onSelect={() => void logoutAction()}>
                   <LogOut />
