@@ -19,6 +19,7 @@ import {
 } from './dto/attendance.dto';
 import { RequirePermission, CurrentUser } from '../../common/decorators';
 import type { AuthenticatedUser } from '../auth/auth.types';
+import { NO_MATCH_UUID } from '../../common/scoping';
 
 @ApiTags('attendance')
 @ApiBearerAuth()
@@ -40,9 +41,13 @@ export class AttendanceController {
     return this.attendance.getSummary({
       from: query.from ? new Date(query.from) : new Date(now.getFullYear(), now.getMonth(), 1),
       to: query.to ? new Date(`${query.to}T23:59:59.999`) : now,
-      // An employee's summary is always narrowed to their own records.
+      // An employee's summary is always narrowed to their own records. A null
+      // employeeId means "no filter" downstream, so an unlinked account must
+      // fall back to a value that matches nothing rather than seeing everyone.
       employeeId:
-        user.role === 'EMPLOYEE' ? user.employeeId : (query.employeeId ?? null),
+        user.role === 'EMPLOYEE'
+          ? (user.employeeId ?? NO_MATCH_UUID)
+          : (query.employeeId ?? null),
       departmentId: query.departmentId ?? null,
     });
   }

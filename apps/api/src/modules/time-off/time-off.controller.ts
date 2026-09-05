@@ -23,6 +23,7 @@ import {
 } from './dto/time-off.dto';
 import { RequirePermission, CurrentUser } from '../../common/decorators';
 import type { AuthenticatedUser } from '../auth/auth.types';
+import { NO_MATCH_UUID } from '../../common/scoping';
 
 @ApiTags('time-off')
 @ApiBearerAuth()
@@ -66,8 +67,11 @@ export class TimeOffController {
     @Param('employeeId', ParseUUIDPipe) employeeId: string,
     @CurrentUser() user: AuthenticatedUser
   ) {
-    // An employee may only read their own balances.
-    const target = user.role === 'EMPLOYEE' ? (user.employeeId ?? employeeId) : employeeId;
+    // An employee may only read their own balances. Falling back to the URL
+    // parameter would let an unlinked account read anyone's, so an employee
+    // with no linked record resolves to a value that matches nothing.
+    const target =
+      user.role === 'EMPLOYEE' ? (user.employeeId ?? NO_MATCH_UUID) : employeeId;
     return this.timeOff.getBalances(target);
   }
 
