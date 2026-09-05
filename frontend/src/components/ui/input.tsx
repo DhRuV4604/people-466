@@ -31,6 +31,9 @@ const fieldSurfaceVariants = cva(
   {
     variants: {
       size: {
+        // For a secondary row — a table footer, say — where a 44px control
+        // would outweigh what it does.
+        sm: "h-9 px-2.5 text-sm",
         md: "h-11 px-3",
         lg: "h-12 px-4",
       },

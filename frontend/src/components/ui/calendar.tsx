@@ -5,12 +5,83 @@ import { cn } from "@/lib/utils"
 import {
   DayPicker,
   getDefaultClassNames,
+  useDayPicker,
   type DayButton,
   type Locale,
+  type MonthCaptionProps,
 } from "react-day-picker"
 
 import { buttonVariants } from "@/components/ui/button"
+import { Select } from "@/components/ui/select"
 import { ChevronLeftIcon, ChevronRightIcon, ChevronDownIcon } from "lucide-react"
+
+/**
+ * The month and year as two dropdowns rather than a label.
+ *
+ * A label plus arrows means twelve clicks to reach last January and rather
+ * more to reach a birth year, which is exactly what a hire date or a date of
+ * birth asks for. These are the app's own `Select`, so the menu that opens is
+ * the same animated one every other field uses rather than a native popup.
+ */
+function CalendarCaption({
+  calendarMonth,
+  // Destructured and dropped: react-day-picker's own props, which React would
+  // otherwise warn about on the div below.
+  displayIndex: _displayIndex,
+  years,
+  locale,
+  ...props
+}: MonthCaptionProps & {
+  years: number[]
+  locale?: Partial<Locale>
+}) {
+  const { goToMonth } = useDayPicker()
+  const shown = calendarMonth.date
+
+  const months = React.useMemo(
+    () =>
+      Array.from({ length: 12 }, (_, month) => ({
+        value: String(month),
+        label: new Date(2000, month, 1).toLocaleString(locale?.code, {
+          month: "long",
+        }),
+      })),
+    [locale?.code]
+  )
+
+  const yearOptions = React.useMemo(
+    () => years.map((year) => ({ value: String(year), label: String(year) })),
+    [years]
+  )
+
+  return (
+    <div {...props}>
+      <Select
+        size="sm"
+        aria-label="Month"
+        className="w-32 border-transparent bg-transparent font-medium shadow-none hover:bg-muted"
+        value={String(shown.getMonth())}
+        options={months}
+        onValueChange={(value) =>
+          goToMonth(new Date(shown.getFullYear(), Number(value), 1))
+        }
+      />
+      <Select
+        size="sm"
+        aria-label="Year"
+        className="w-[5.5rem] border-transparent bg-transparent font-medium shadow-none hover:bg-muted"
+        // The list is long, so the menu scrolls rather than growing past the
+        // popover it sits in.
+        menuClassName="max-h-64 overflow-y-auto"
+        value={String(shown.getFullYear())}
+        options={yearOptions}
+        onValueChange={(value) =>
+          goToMonth(new Date(Number(value), shown.getMonth(), 1))
+        }
+      />
+    </div>
+  )
+}
 
 function Calendar({
   className,
@@ -18,14 +89,29 @@ function Calendar({
   showOutsideDays = true,
   captionLayout = "label",
   buttonVariant = "ghost",
+  fromYear,
+  toYear,
   locale,
   formatters,
   components,
   ...props
 }: React.ComponentProps<typeof DayPicker> & {
   buttonVariant?: Parameters<typeof buttonVariants>[0] extends infer P ? (P extends { variant?: infer V } ? V : never) : never
+  /** Earliest year the dropdown offers. Defaults to 80 years back, which covers a date of birth. */
+  fromYear?: number
+  /** Latest year offered. Defaults to 10 years ahead, which covers a contract end. */
+  toYear?: number
 }) {
   const defaultClassNames = getDefaultClassNames()
+
+  const years = React.useMemo(() => {
+    const now = new Date().getFullYear()
+    const first = fromYear ?? now - 80
+    const last = toYear ?? now + 10
+    // Newest first: a hire date or a contract date is far more often recent
+    // than not, so the useful end of the list is the end you land on.
+    return Array.from({ length: last - first + 1 }, (_, i) => last - i)
+  }, [fromYear, toYear])
 
   return (
     <DayPicker
@@ -51,21 +137,26 @@ function Calendar({
         ),
         month: cn("flex w-full flex-col gap-4", defaultClassNames.month),
         nav: cn(
-          "absolute inset-x-0 top-0 flex w-full items-center justify-between gap-1",
+          // The bar spans the full width to push the arrows to either end, so
+          // it would otherwise sit on top of the caption and swallow clicks on
+          // the month and year dropdowns. Only the buttons take pointers.
+          "pointer-events-none absolute inset-x-0 top-0 flex w-full items-center justify-between gap-1",
           defaultClassNames.nav
         ),
         button_previous: cn(
           buttonVariants({ variant: buttonVariant }),
-          "size-(--cell-size) p-0 select-none aria-disabled:opacity-50",
+          "pointer-events-auto size-(--cell-size) p-0 select-none aria-disabled:opacity-50",
           defaultClassNames.button_previous
         ),
         button_next: cn(
           buttonVariants({ variant: buttonVariant }),
-          "size-(--cell-size) p-0 select-none aria-disabled:opacity-50",
+          "pointer-events-auto size-(--cell-size) p-0 select-none aria-disabled:opacity-50",
           defaultClassNames.button_next
         ),
         month_caption: cn(
-          "flex h-(--cell-size) w-full items-center justify-center px-(--cell-size)",
+          // Tall enough for the dropdowns, and padded past the nav arrows that
+          // sit absolutely positioned at either end.
+          "flex h-9 w-full items-center justify-center gap-1 px-(--cell-size)",
           defaultClassNames.month_caption
         ),
         dropdowns: cn(
@@ -163,6 +254,9 @@ function Calendar({
         },
         DayButton: ({ ...props }) => (
           <CalendarDayButton locale={locale} {...props} />
+        ),
+        MonthCaption: (captionProps) => (
+          <CalendarCaption years={years} locale={locale} {...captionProps} />
         ),
         WeekNumber: ({ children, ...props }) => {
           return (

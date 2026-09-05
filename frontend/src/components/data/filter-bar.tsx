@@ -177,16 +177,26 @@ export function FilterBar({
 
         {views || actions ? (
           <div className="ml-auto flex items-center gap-3">
+            {/* The toggle is sized to the row rather than to its own default,
+                so it shares a baseline with the selects and the search box. */}
             {views ? (
               <ToggleGroup
                 type="single"
                 value={view}
                 onValueChange={(value) => value && apply({ view: value })}
               >
-                <ToggleGroupItem value="cards" aria-label="Card view">
+                <ToggleGroupItem
+                  value="cards"
+                  aria-label="Card view"
+                  className="size-11"
+                >
                   <LayoutGrid />
                 </ToggleGroupItem>
-                <ToggleGroupItem value="list" aria-label="List view">
+                <ToggleGroupItem
+                  value="list"
+                  aria-label="List view"
+                  className="size-11"
+                >
                   <List />
                 </ToggleGroupItem>
               </ToggleGroup>

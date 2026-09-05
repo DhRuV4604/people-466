@@ -78,7 +78,9 @@ export function RecordDialog({
         {open === undefined ? (
           <DialogTrigger asChild>
             {trigger ?? (
-              <Button startIcon={<Plus />} size="sm">
+              // md, not sm: this sits in a filter bar next to the search box
+              // and the selects, and those are 44px tall.
+              <Button startIcon={<Plus />} size="md">
                 {title}
               </Button>
             )}

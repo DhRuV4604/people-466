@@ -26,7 +26,7 @@ type SelectProps = {
   defaultValue?: string;
   onValueChange?: (value: string) => void;
   placeholder?: string;
-  size?: "md" | "lg";
+  size?: "sm" | "md" | "lg";
   invalid?: boolean;
   disabled?: boolean;
   id?: string;

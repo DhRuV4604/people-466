@@ -82,8 +82,8 @@ export function Pagination({ meta, noun, plural, param }: Props) {
         <label className="flex items-center gap-2 text-sm text-muted-foreground">
           <span className="hidden sm:inline">Per page</span>
           <Select
-            size="md"
-            className="w-20"
+            size="sm"
+            className="w-[4.5rem]"
             value={String(pageSize)}
             options={PAGE_SIZES.map((size) => ({
               value: String(size),
@@ -100,7 +100,8 @@ export function Pagination({ meta, noun, plural, param }: Props) {
         <div className="flex items-center gap-1">
           <Button
             variant="outline"
-            size="icon-sm"
+            size="sm"
+            className="w-9 px-0"
             aria-label="Previous page"
             disabled={page <= 1}
             onClick={() =>
@@ -114,7 +115,8 @@ export function Pagination({ meta, noun, plural, param }: Props) {
           </span>
           <Button
             variant="outline"
-            size="icon-sm"
+            size="sm"
+            className="w-9 px-0"
             aria-label="Next page"
             disabled={page >= totalPages}
             onClick={() => go({ [keys.page]: String(page + 1) })}

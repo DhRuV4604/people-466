@@ -276,7 +276,7 @@ export default async function AttendancePage({
                   <ActionButton
                     action={checkIn}
                     variant="outline"
-                    size="sm"
+                    size="md"
                     startIcon={<LogIn />}
                     pendingLabel="Checking in"
                   >
