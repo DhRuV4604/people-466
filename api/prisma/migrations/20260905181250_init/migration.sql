@@ -40,14 +40,19 @@ CREATE TYPE "PayslipStatus" AS ENUM ('DRAFT', 'COMPUTED', 'VALIDATED', 'PAID', '
 -- CreateEnum
 CREATE TYPE "EmailStatus" AS ENUM ('QUEUED', 'SENT', 'FAILED');
 
+-- CreateEnum
+CREATE TYPE "AuditAction" AS ENUM ('CREATE', 'UPDATE', 'DELETE', 'APPROVE', 'REFUSE', 'CANCEL', 'COMPUTE', 'VALIDATE', 'PAY', 'SEND', 'LOGIN');
+
 -- CreateTable
 CREATE TABLE "User" (
-    "id" TEXT NOT NULL,
+    "id" UUID NOT NULL,
     "email" TEXT NOT NULL,
     "name" TEXT NOT NULL,
     "passwordHash" TEXT NOT NULL,
     "role" TEXT NOT NULL,
     "active" BOOLEAN NOT NULL DEFAULT true,
+    "mustChangePassword" BOOLEAN NOT NULL DEFAULT true,
+    "invitedAt" TIMESTAMP(3),
     "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
     "updatedAt" TIMESTAMP(3) NOT NULL,
 
@@ -56,7 +61,7 @@ CREATE TABLE "User" (
 
 -- CreateTable
 CREATE TABLE "Department" (
-    "id" TEXT NOT NULL,
+    "id" UUID NOT NULL,
     "name" TEXT NOT NULL,
     "code" TEXT,
     "managerId" TEXT,
@@ -67,7 +72,7 @@ CREATE TABLE "Department" (
 
 -- CreateTable
 CREATE TABLE "JobPosition" (
-    "id" TEXT NOT NULL,
+    "id" UUID NOT NULL,
     "name" TEXT NOT NULL,
     "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
 
@@ -76,7 +81,7 @@ CREATE TABLE "JobPosition" (
 
 -- CreateTable
 CREATE TABLE "Employee" (
-    "id" TEXT NOT NULL,
+    "id" UUID NOT NULL,
     "employeeCode" TEXT NOT NULL,
     "firstName" TEXT NOT NULL,
     "lastName" TEXT NOT NULL,
@@ -91,11 +96,11 @@ CREATE TABLE "Employee" (
     "status" "EmployeeStatus" NOT NULL DEFAULT 'ACTIVE',
     "hireDate" TIMESTAMP(3) NOT NULL,
     "exitDate" TIMESTAMP(3),
-    "departmentId" TEXT,
-    "jobPositionId" TEXT,
-    "managerId" TEXT,
-    "workingScheduleId" TEXT,
-    "userId" TEXT,
+    "departmentId" UUID,
+    "jobPositionId" UUID,
+    "managerId" UUID,
+    "workingScheduleId" UUID,
+    "userId" UUID NOT NULL,
     "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
     "updatedAt" TIMESTAMP(3) NOT NULL,
 
@@ -104,7 +109,7 @@ CREATE TABLE "Employee" (
 
 -- CreateTable
 CREATE TABLE "WorkingSchedule" (
-    "id" TEXT NOT NULL,
+    "id" UUID NOT NULL,
     "name" TEXT NOT NULL,
     "scheduleType" "ScheduleType" NOT NULL DEFAULT 'FULL_TIME',
     "timezone" TEXT NOT NULL DEFAULT 'UTC',
@@ -118,8 +123,8 @@ CREATE TABLE "WorkingSchedule" (
 
 -- CreateTable
 CREATE TABLE "WorkingScheduleLine" (
-    "id" TEXT NOT NULL,
-    "scheduleId" TEXT NOT NULL,
+    "id" UUID NOT NULL,
+    "scheduleId" UUID NOT NULL,
     "dayOfWeek" INTEGER NOT NULL,
     "startTime" TEXT NOT NULL,
     "endTime" TEXT NOT NULL,
@@ -130,17 +135,17 @@ CREATE TABLE "WorkingScheduleLine" (
 
 -- CreateTable
 CREATE TABLE "Contract" (
-    "id" TEXT NOT NULL,
+    "id" UUID NOT NULL,
     "name" TEXT NOT NULL,
-    "employeeId" TEXT NOT NULL,
+    "employeeId" UUID NOT NULL,
     "dateStart" TIMESTAMP(3) NOT NULL,
     "dateEnd" TIMESTAMP(3),
     "status" "ContractStatus" NOT NULL DEFAULT 'DRAFT',
     "wage" DECIMAL(12,2) NOT NULL,
     "contractType" "ContractType" NOT NULL DEFAULT 'PERMANENT',
-    "jobPositionId" TEXT,
-    "workingScheduleId" TEXT,
-    "salaryStructureId" TEXT,
+    "jobPositionId" UUID,
+    "workingScheduleId" UUID,
+    "salaryStructureId" UUID,
     "notes" TEXT,
     "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
     "updatedAt" TIMESTAMP(3) NOT NULL,
@@ -150,8 +155,8 @@ CREATE TABLE "Contract" (
 
 -- CreateTable
 CREATE TABLE "Attendance" (
-    "id" TEXT NOT NULL,
-    "employeeId" TEXT NOT NULL,
+    "id" UUID NOT NULL,
+    "employeeId" UUID NOT NULL,
     "checkIn" TIMESTAMP(3) NOT NULL,
     "checkOut" TIMESTAMP(3),
     "workedHours" DECIMAL(8,2) NOT NULL DEFAULT 0,
@@ -170,7 +175,7 @@ CREATE TABLE "Attendance" (
 
 -- CreateTable
 CREATE TABLE "TimeOffType" (
-    "id" TEXT NOT NULL,
+    "id" UUID NOT NULL,
     "name" TEXT NOT NULL,
     "code" TEXT NOT NULL,
     "unit" "LeaveUnit" NOT NULL DEFAULT 'DAY',
@@ -188,9 +193,9 @@ CREATE TABLE "TimeOffType" (
 
 -- CreateTable
 CREATE TABLE "LeaveAllocation" (
-    "id" TEXT NOT NULL,
-    "employeeId" TEXT NOT NULL,
-    "typeId" TEXT NOT NULL,
+    "id" UUID NOT NULL,
+    "employeeId" UUID NOT NULL,
+    "typeId" UUID NOT NULL,
     "quantity" DECIMAL(8,2) NOT NULL,
     "validFrom" TIMESTAMP(3) NOT NULL,
     "validTo" TIMESTAMP(3),
@@ -206,10 +211,10 @@ CREATE TABLE "LeaveAllocation" (
 
 -- CreateTable
 CREATE TABLE "LeaveRequest" (
-    "id" TEXT NOT NULL,
-    "employeeId" TEXT NOT NULL,
-    "typeId" TEXT NOT NULL,
-    "allocationId" TEXT,
+    "id" UUID NOT NULL,
+    "employeeId" UUID NOT NULL,
+    "typeId" UUID NOT NULL,
+    "allocationId" UUID,
     "dateFrom" TIMESTAMP(3) NOT NULL,
     "dateTo" TIMESTAMP(3) NOT NULL,
     "duration" DECIMAL(8,2) NOT NULL,
@@ -228,7 +233,7 @@ CREATE TABLE "LeaveRequest" (
 
 -- CreateTable
 CREATE TABLE "SalaryStructure" (
-    "id" TEXT NOT NULL,
+    "id" UUID NOT NULL,
     "name" TEXT NOT NULL,
     "code" TEXT NOT NULL,
     "description" TEXT,
@@ -241,10 +246,10 @@ CREATE TABLE "SalaryStructure" (
 
 -- CreateTable
 CREATE TABLE "SalaryRule" (
-    "id" TEXT NOT NULL,
+    "id" UUID NOT NULL,
     "name" TEXT NOT NULL,
     "code" TEXT NOT NULL,
-    "structureId" TEXT NOT NULL,
+    "structureId" UUID NOT NULL,
     "category" "RuleCategory" NOT NULL,
     "sequence" INTEGER NOT NULL DEFAULT 100,
     "computeType" "ComputeType" NOT NULL DEFAULT 'FIXED',
@@ -264,9 +269,9 @@ CREATE TABLE "SalaryRule" (
 
 -- CreateTable
 CREATE TABLE "Payrun" (
-    "id" TEXT NOT NULL,
+    "id" UUID NOT NULL,
     "name" TEXT NOT NULL,
-    "structureId" TEXT NOT NULL,
+    "structureId" UUID NOT NULL,
     "periodStart" TIMESTAMP(3) NOT NULL,
     "periodEnd" TIMESTAMP(3) NOT NULL,
     "status" "PayrunStatus" NOT NULL DEFAULT 'DRAFT',
@@ -284,12 +289,12 @@ CREATE TABLE "Payrun" (
 
 -- CreateTable
 CREATE TABLE "Payslip" (
-    "id" TEXT NOT NULL,
+    "id" UUID NOT NULL,
     "number" TEXT NOT NULL,
-    "employeeId" TEXT NOT NULL,
-    "payrunId" TEXT,
-    "contractId" TEXT,
-    "structureId" TEXT NOT NULL,
+    "employeeId" UUID NOT NULL,
+    "payrunId" UUID,
+    "contractId" UUID,
+    "structureId" UUID NOT NULL,
     "periodStart" TIMESTAMP(3) NOT NULL,
     "periodEnd" TIMESTAMP(3) NOT NULL,
     "status" "PayslipStatus" NOT NULL DEFAULT 'DRAFT',
@@ -310,9 +315,9 @@ CREATE TABLE "Payslip" (
 
 -- CreateTable
 CREATE TABLE "PayslipLine" (
-    "id" TEXT NOT NULL,
-    "payslipId" TEXT NOT NULL,
-    "ruleId" TEXT,
+    "id" UUID NOT NULL,
+    "payslipId" UUID NOT NULL,
+    "ruleId" UUID,
     "code" TEXT NOT NULL,
     "name" TEXT NOT NULL,
     "category" "RuleCategory" NOT NULL,
@@ -326,9 +331,9 @@ CREATE TABLE "PayslipLine" (
 
 -- CreateTable
 CREATE TABLE "EmailLog" (
-    "id" TEXT NOT NULL,
-    "payslipId" TEXT,
-    "payrunId" TEXT,
+    "id" UUID NOT NULL,
+    "payslipId" UUID,
+    "payrunId" UUID,
     "toEmail" TEXT NOT NULL,
     "toName" TEXT,
     "subject" TEXT NOT NULL,
@@ -340,6 +345,51 @@ CREATE TABLE "EmailLog" (
     "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
 
     CONSTRAINT "EmailLog_pkey" PRIMARY KEY ("id")
+);
+
+-- CreateTable
+CREATE TABLE "AuditLog" (
+    "id" UUID NOT NULL,
+    "userId" UUID,
+    "userName" TEXT NOT NULL,
+    "userRole" TEXT NOT NULL,
+    "action" "AuditAction" NOT NULL,
+    "entity" TEXT NOT NULL,
+    "entityId" TEXT,
+    "entityLabel" TEXT,
+    "changes" JSONB,
+    "snapshot" JSONB,
+    "method" TEXT NOT NULL,
+    "path" TEXT NOT NULL,
+    "ip" TEXT,
+    "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+
+    CONSTRAINT "AuditLog_pkey" PRIMARY KEY ("id")
+);
+
+-- CreateTable
+CREATE TABLE "Notification" (
+    "id" UUID NOT NULL,
+    "userId" UUID NOT NULL,
+    "type" TEXT NOT NULL,
+    "title" TEXT NOT NULL,
+    "body" TEXT,
+    "href" TEXT,
+    "actorName" TEXT,
+    "readAt" TIMESTAMP(3),
+    "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+
+    CONSTRAINT "Notification_pkey" PRIMARY KEY ("id")
+);
+
+-- CreateTable
+CREATE TABLE "AppSettings" (
+    "id" TEXT NOT NULL DEFAULT 'singleton',
+    "maxCheckInsPerDay" INTEGER NOT NULL DEFAULT 1,
+    "warnOnCheckOut" BOOLEAN NOT NULL DEFAULT true,
+    "updatedAt" TIMESTAMP(3) NOT NULL,
+
+    CONSTRAINT "AppSettings_pkey" PRIMARY KEY ("id")
 );
 
 -- CreateIndex
@@ -435,6 +485,24 @@ CREATE INDEX "PayslipLine_payslipId_sequence_idx" ON "PayslipLine"("payslipId", 
 -- CreateIndex
 CREATE INDEX "EmailLog_payrunId_idx" ON "EmailLog"("payrunId");
 
+-- CreateIndex
+CREATE INDEX "AuditLog_createdAt_idx" ON "AuditLog"("createdAt");
+
+-- CreateIndex
+CREATE INDEX "AuditLog_entity_entityId_idx" ON "AuditLog"("entity", "entityId");
+
+-- CreateIndex
+CREATE INDEX "AuditLog_userId_idx" ON "AuditLog"("userId");
+
+-- CreateIndex
+CREATE INDEX "AuditLog_action_idx" ON "AuditLog"("action");
+
+-- CreateIndex
+CREATE INDEX "Notification_userId_readAt_idx" ON "Notification"("userId", "readAt");
+
+-- CreateIndex
+CREATE INDEX "Notification_userId_createdAt_idx" ON "Notification"("userId", "createdAt");
+
 -- AddForeignKey
 ALTER TABLE "Employee" ADD CONSTRAINT "Employee_departmentId_fkey" FOREIGN KEY ("departmentId") REFERENCES "Department"("id") ON DELETE SET NULL ON UPDATE CASCADE;
 
@@ -448,7 +516,7 @@ ALTER TABLE "Employee" ADD CONSTRAINT "Employee_managerId_fkey" FOREIGN KEY ("ma
 ALTER TABLE "Employee" ADD CONSTRAINT "Employee_workingScheduleId_fkey" FOREIGN KEY ("workingScheduleId") REFERENCES "WorkingSchedule"("id") ON DELETE SET NULL ON UPDATE CASCADE;
 
 -- AddForeignKey
-ALTER TABLE "Employee" ADD CONSTRAINT "Employee_userId_fkey" FOREIGN KEY ("userId") REFERENCES "User"("id") ON DELETE SET NULL ON UPDATE CASCADE;
+ALTER TABLE "Employee" ADD CONSTRAINT "Employee_userId_fkey" FOREIGN KEY ("userId") REFERENCES "User"("id") ON DELETE CASCADE ON UPDATE CASCADE;
 
 -- AddForeignKey
 ALTER TABLE "WorkingScheduleLine" ADD CONSTRAINT "WorkingScheduleLine_scheduleId_fkey" FOREIGN KEY ("scheduleId") REFERENCES "WorkingSchedule"("id") ON DELETE CASCADE ON UPDATE CASCADE;
@@ -512,3 +580,9 @@ ALTER TABLE "EmailLog" ADD CONSTRAINT "EmailLog_payslipId_fkey" FOREIGN KEY ("pa
 
 -- AddForeignKey
 ALTER TABLE "EmailLog" ADD CONSTRAINT "EmailLog_payrunId_fkey" FOREIGN KEY ("payrunId") REFERENCES "Payrun"("id") ON DELETE SET NULL ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "AuditLog" ADD CONSTRAINT "AuditLog_userId_fkey" FOREIGN KEY ("userId") REFERENCES "User"("id") ON DELETE SET NULL ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "Notification" ADD CONSTRAINT "Notification_userId_fkey" FOREIGN KEY ("userId") REFERENCES "User"("id") ON DELETE CASCADE ON UPDATE CASCADE;
