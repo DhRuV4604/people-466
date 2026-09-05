@@ -467,7 +467,48 @@ export interface SendPayslipsResultDto {
 
 // ---------------------------------------------------------------- Dashboard
 
+/**
+ * Something on the dashboard that a person can act on, rather than a number to
+ * read. Each carries the ids the action needs, so the work can be finished
+ * where it was noticed.
+ */
+export const DASHBOARD_TASK_KINDS = [
+  'PENDING_LEAVE',
+  'MISSING_BANK',
+  'NO_CONTRACT',
+  'NEVER_INVITED',
+  'AWAITING_SIGNATURE',
+  'DRAFT_PAYRUN',
+  'EXPIRING_CONTRACT',
+  'MISSING_CHECKOUT',
+] as const;
+export type DashboardTaskKind = (typeof DASHBOARD_TASK_KINDS)[number];
+
+export interface DashboardTaskSubject {
+  /** What the action is aimed at: an employee, a request, a pay run. */
+  id: string;
+  name: string;
+  /** One line of context — a department, a date range, a status. */
+  detail: string | null;
+}
+
+export interface DashboardTask {
+  kind: DashboardTaskKind;
+  count: number;
+  /** Capped: the strip shows the first few and says how many more there are. */
+  subjects: DashboardTaskSubject[];
+}
+
 export interface DashboardDto {
+  /**
+   * The month every figure here describes.
+   *
+   * It is not always the current one: the API opens on the latest month that
+   * has payroll, so a dashboard read in September may be describing August.
+   * Anything phrased as a problem has to name it, or "no contract" reads as
+   * "you never made one" when the truth is "not for the month being shown".
+   */
+  period: { start: ISODate; end: ISODate; label: string };
   kpis: {
     totalNetPaid: number;
     payslipsGenerated: number;
@@ -495,6 +536,8 @@ export interface DashboardDto {
     draftPayruns: { id: string; name: string; status: string }[];
     pendingAllocations: number;
   };
+  /** Ordered most-urgent first by the API, so every client agrees on it. */
+  tasks: DashboardTask[];
   payrunStatusBreakdown: { status: string; count: number }[];
   employeeTypeBreakdown: { type: string; count: number }[];
 }

@@ -1,6 +1,10 @@
 import { Injectable } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
-import { resolveContractForPeriod, type DashboardDto } from '@peoplepay360/shared';
+import {
+  resolveContractForPeriod,
+  type DashboardDto,
+  type DashboardTask,
+} from '@peoplepay360/shared';
 import { PrismaService } from '../../prisma/prisma.service';
 import { toNumber, round2 } from '../../common/decimal';
 import { AttendanceService } from '../attendance/attendance.service';
@@ -81,6 +85,15 @@ export class DashboardService {
       pendingAllocations,
       payslipTotals,
       trendPayslips,
+      neverInvited,
+      awaitingSignature,
+      missingCheckout,
+      // Counted separately from the sample above: the sample is capped so the
+      // payload stays small, and a capped list reporting its own length would
+      // say "20" however many there really are.
+      neverInvitedCount,
+      awaitingSignatureCount,
+      missingCheckoutCount,
     ] = await Promise.all([
       this.prisma.employee.findMany({
         where: employeeFilter,
@@ -158,6 +171,55 @@ export class DashboardService {
           ...relatedEmployeeFilter,
         },
         select: { periodStart: true, netPay: true },
+      }),
+      // Accounts that exist but have never been asked to sign in. The identity
+      // migration created these, and nothing else on the dashboard surfaces
+      // them - they are invisible until someone wonders why a colleague cannot
+      // log in.
+      this.prisma.employee.findMany({
+        where: { user: { invitedAt: null, active: false }, ...employeeFilter },
+        select: {
+          id: true,
+          firstName: true,
+          lastName: true,
+          department: { select: { name: true } },
+        },
+        take: 20,
+      }),
+      this.prisma.document.findMany({
+        where: { status: 'AWAITING_SIGNATURE' },
+        select: {
+          id: true,
+          title: true,
+          employee: { select: { firstName: true, lastName: true } },
+        },
+        orderBy: { sentAt: 'asc' },
+        take: 20,
+      }),
+      this.prisma.attendance.findMany({
+        where: {
+          checkOut: null,
+          checkIn: { gte: filters.periodStart, lte: filters.periodEnd },
+          ...relatedEmployeeFilter,
+        },
+        select: {
+          id: true,
+          checkIn: true,
+          employee: { select: { firstName: true, lastName: true } },
+        },
+        orderBy: { checkIn: 'desc' },
+        take: 20,
+      }),
+      this.prisma.employee.count({
+        where: { user: { invitedAt: null, active: false }, ...employeeFilter },
+      }),
+      this.prisma.document.count({ where: { status: 'AWAITING_SIGNATURE' } }),
+      this.prisma.attendance.count({
+        where: {
+          checkOut: null,
+          checkIn: { gte: filters.periodStart, lte: filters.periodEnd },
+          ...relatedEmployeeFilter,
+        },
       }),
     ]);
 
@@ -269,6 +331,82 @@ export class DashboardService {
       .map((p) => ({ id: p.id, name: p.name, status: p.status }));
 
 
+    // ---- Tasks
+    //
+    // The same facts as the alerts above, shaped for doing rather than
+    // reading: each carries the id its action needs, and they are ordered by
+    // how much trouble ignoring one causes. Leave sits first because somebody
+    // is waiting on an answer; a draft pay run sits above an expiring contract
+    // because it blocks this month rather than next quarter.
+    const pendingLeave = leaveRequests
+      .filter((r) => r.status === 'TO_APPROVE')
+      .slice(0, 20)
+      .map((r) => ({
+        id: r.id,
+        name: employees.find((e) => e.id === r.employeeId)
+          ? `${employees.find((e) => e.id === r.employeeId)!.firstName} ${employees.find((e) => e.id === r.employeeId)!.lastName}`
+          : r.type.name,
+        detail: `${r.type.name} · ${r.dateFrom.toISOString().slice(0, 10)} to ${r.dateTo.toISOString().slice(0, 10)}`,
+      }));
+
+    const subjectsOf = (
+      rows: { id: string; name: string; department?: string; detail?: string | null }[]
+    ) =>
+      rows.slice(0, 20).map((r) => ({
+        id: r.id,
+        name: r.name,
+        detail: r.detail ?? r.department ?? null,
+      }));
+
+    const tasks: DashboardTask[] = [
+      { kind: 'PENDING_LEAVE' as const, count: leaveRequests.filter((r) => r.status === 'TO_APPROVE').length, subjects: pendingLeave },
+      { kind: 'MISSING_BANK' as const, count: missingBankDetails.length, subjects: subjectsOf(missingBankDetails) },
+      { kind: 'NO_CONTRACT' as const, count: noContract.length, subjects: subjectsOf(noContract) },
+      {
+        kind: 'NEVER_INVITED' as const,
+        count: neverInvitedCount,
+        subjects: neverInvited.map((e) => ({
+          id: e.id,
+          name: `${e.firstName} ${e.lastName}`,
+          detail: e.department?.name ?? null,
+        })),
+      },
+      {
+        kind: 'AWAITING_SIGNATURE' as const,
+        count: awaitingSignatureCount,
+        subjects: awaitingSignature.map((d) => ({
+          id: d.id,
+          name: d.title,
+          detail: `${d.employee.firstName} ${d.employee.lastName}`,
+        })),
+      },
+      {
+        kind: 'DRAFT_PAYRUN' as const,
+        count: draftPayruns.length,
+        subjects: draftPayruns.map((p) => ({ id: p.id, name: p.name, detail: p.status })),
+      },
+      {
+        kind: 'EXPIRING_CONTRACT' as const,
+        count: expiringContracts.length,
+        subjects: expiringContracts.map((c) => ({
+          id: c.id,
+          name: c.name,
+          detail: c.dateEnd ? `ends ${c.dateEnd.slice(0, 10)}` : null,
+        })),
+      },
+      {
+        kind: 'MISSING_CHECKOUT' as const,
+        count: missingCheckoutCount,
+        subjects: missingCheckout.map((a) => ({
+          id: a.id,
+          name: `${a.employee.firstName} ${a.employee.lastName}`,
+          detail: `checked in ${a.checkIn.toISOString().slice(0, 10)}`,
+        })),
+      },
+      // Nothing to do is worth saying, so the empty ones are dropped here
+      // rather than rendered as a row of zeros nobody needs to scan.
+    ].filter((task) => task.count > 0);
+
     // ---- Breakdowns
     const payrunStatusBreakdown = ['DRAFT', 'COMPUTED', 'VALIDATED', 'PAID'].map((status) => ({
       status,
@@ -307,6 +445,15 @@ export class DashboardService {
         draftPayruns,
         pendingAllocations,
       },
+      period: {
+        start: filters.periodStart.toISOString(),
+        end: filters.periodEnd.toISOString(),
+        label: filters.periodStart.toLocaleDateString('en-GB', {
+          month: 'long',
+          year: 'numeric',
+        }),
+      },
+      tasks,
       payrunStatusBreakdown,
       employeeTypeBreakdown,
     };
