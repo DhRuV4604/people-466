@@ -35,7 +35,13 @@ import type {
 
 const INCLUDE = {
   employee: {
-    select: { id: true, firstName: true, lastName: true, employeeCode: true },
+    select: {
+      id: true,
+      firstName: true,
+      lastName: true,
+      employeeCode: true,
+      avatarId: true,
+    },
   },
   file: { select: { id: true, filename: true, mimeType: true, size: true } },
   signedFile: { select: { id: true, filename: true, mimeType: true, size: true } },
@@ -78,6 +84,7 @@ export class DocumentsService {
         id: row.employee.id,
         fullName: `${row.employee.firstName} ${row.employee.lastName}`,
         employeeCode: row.employee.employeeCode,
+        avatarFileId: row.employee.avatarId,
       },
       file: row.file,
       signedFile: row.signedFile,

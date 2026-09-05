@@ -584,7 +584,12 @@ export interface DocumentDto {
   message: string | null;
   requiresSignature: boolean;
   employeeId: string;
-  employee?: { id: string; fullName: string; employeeCode: string };
+  employee?: {
+    id: string;
+    fullName: string;
+    employeeCode: string;
+    avatarFileId: string | null;
+  };
   file: StoredFileDto | null;
   signedFile: StoredFileDto | null;
   createdBy: { id: string; name: string };

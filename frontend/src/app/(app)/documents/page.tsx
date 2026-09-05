@@ -15,6 +15,7 @@ import { Pagination } from "@/components/data/pagination";
 import { pageQuery } from "@/components/data/pagination-params";
 import { Badge, UserAvatar } from "@/components/ui";
 import { apiFetch } from "@/lib/api-client";
+import { avatarUrl } from "@/lib/avatar";
 import { loadRefs } from "@/lib/refs";
 import {
   DOCUMENT_KIND_LABELS,
@@ -140,7 +141,17 @@ export default async function DocumentsPage({
                   <span className="sr-only">Open {document.title}</span>
                 </Link>
 
-                <UserAvatar name={document.employee?.fullName ?? "?"} />
+                <UserAvatar
+                  name={document.employee?.fullName ?? "?"}
+                  src={
+                    document.employee
+                      ? avatarUrl(
+                          document.employee.id,
+                          document.employee.avatarFileId,
+                        )
+                      : undefined
+                  }
+                />
 
                 <div className="min-w-0 flex-1">
                   <p className="truncate text-sm font-medium">
