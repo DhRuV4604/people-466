@@ -14,9 +14,10 @@ export interface SignatureEvidence {
   signatureImage: string;
 }
 
+const BRAND = rgb(0.427, 0.157, 0.851);
 const INK = rgb(0.07, 0.09, 0.15);
 const MUTED = rgb(0.42, 0.45, 0.5);
-const LINE = rgb(0.9, 0.91, 0.92);
+const LINE = rgb(0.88, 0.89, 0.91);
 
 function formatStamp(date: Date): string {
   return `${date.toISOString().replace('T', ' ').slice(0, 19)} UTC`;
@@ -49,77 +50,156 @@ export class SigningService {
     const body = await pdf.embedFont(StandardFonts.Helvetica);
     const mono = await pdf.embedFont(StandardFonts.Courier);
 
-    const left = 56;
-    let y = height - 72;
+    const margin = 56;
+    const inner = width - margin * 2;
 
-    page.drawText('Certificate of signature', { x: left, y, size: 20, font: bold, color: INK });
-    y -= 18;
-    page.drawText(evidence.documentTitle.slice(0, 90), { x: left, y, size: 11, font: body, color: MUTED });
-
-    y -= 26;
-    page.drawLine({
-      start: { x: left, y },
-      end: { x: width - left, y },
-      thickness: 1,
-      color: LINE,
+    // A band across the top rather than a heading floating on white: this page
+    // was added by the system, and it should not be mistakable for another
+    // page of the document a person actually agreed to.
+    page.drawRectangle({
+      x: 0,
+      y: height - 84,
+      width,
+      height: 84,
+      color: BRAND,
+    });
+    page.drawText('Certificate of signature', {
+      x: margin,
+      y: height - 46,
+      size: 17,
+      font: bold,
+      color: rgb(1, 1, 1),
+    });
+    page.drawText(evidence.documentTitle.slice(0, 78), {
+      x: margin,
+      y: height - 66,
+      size: 9.5,
+      font: body,
+      color: rgb(0.89, 0.85, 0.98),
     });
 
-    // The mark itself, above the facts about it.
-    y -= 30;
-    page.drawText('Signed by', { x: left, y, size: 9, font: bold, color: MUTED });
-    y -= 16;
-    page.drawText(evidence.signerName, { x: left, y, size: 14, font: bold, color: INK });
+    let y = height - 84 - 44;
+
+    // ---- The mark itself, in a box that reads as a signature block.
+    const boxHeight = 96;
+    page.drawRectangle({
+      x: margin,
+      y: y - boxHeight,
+      width: inner,
+      height: boxHeight,
+      borderColor: LINE,
+      borderWidth: 1,
+      color: rgb(0.985, 0.985, 0.99),
+    });
+
+    page.drawText('SIGNED BY', {
+      x: margin + 16,
+      y: y - 22,
+      size: 7.5,
+      font: bold,
+      color: MUTED,
+    });
+    page.drawText(evidence.signerName, {
+      x: margin + 16,
+      y: y - 40,
+      size: 14,
+      font: bold,
+      color: INK,
+    });
+    page.drawText(evidence.signerEmail, {
+      x: margin + 16,
+      y: y - 56,
+      size: 9,
+      font: body,
+      color: MUTED,
+    });
 
     const png = evidence.signatureImage.split(',')[1];
     if (png) {
       const image = await pdf.embedPng(Buffer.from(png, 'base64')).catch(() => null);
       if (image) {
         // Scaled to a fixed height so a wide scrawl and a short one sit the
-        // same on the page.
-        const drawn = image.scaleToFit(220, 64);
-        y -= drawn.height + 12;
-        page.drawImage(image, { x: left, y, width: drawn.width, height: drawn.height });
-        y -= 8;
+        // same on the page, and right-aligned inside the box so the name and
+        // the mark read as one signature block.
+        const drawn = image.scaleToFit(190, 52);
+        page.drawImage(image, {
+          x: margin + inner - drawn.width - 24,
+          y: y - boxHeight + 30,
+          width: drawn.width,
+          height: drawn.height,
+        });
         page.drawLine({
-          start: { x: left, y },
-          end: { x: left + 260, y },
+          start: { x: margin + inner - 214, y: y - boxHeight + 24 },
+          end: { x: margin + inner - 24, y: y - boxHeight + 24 },
           thickness: 1,
           color: LINE,
         });
       }
     }
 
-    y -= 34;
-    const rows: [string, string][] = [
-      ['Email', evidence.signerEmail],
-      ['Signed at', formatStamp(evidence.signedAt)],
-      ['IP address', evidence.ip || 'not recorded'],
-      ['Device', evidence.userAgent.slice(0, 78) || 'not recorded'],
-    ];
-    for (const [label, value] of rows) {
-      page.drawText(label, { x: left, y, size: 9, font: bold, color: MUTED });
-      page.drawText(value, { x: left + 96, y, size: 9, font: body, color: INK });
-      y -= 18;
-    }
+    y -= boxHeight + 34;
 
-    y -= 10;
-    page.drawText('Document fingerprint (SHA-256)', { x: left, y, size: 9, font: bold, color: MUTED });
-    y -= 15;
-    // Split, because a 64-character hash does not fit the page in one line and
-    // a truncated fingerprint proves nothing.
-    page.drawText(evidence.documentChecksum.slice(0, 32), { x: left, y, size: 9, font: mono, color: INK });
-    y -= 13;
-    page.drawText(evidence.documentChecksum.slice(32), { x: left, y, size: 9, font: mono, color: INK });
+    // ---- What was recorded, in two columns so the page is not a long list.
+    const half = inner / 2;
+    const fact = (x: number, top: number, label: string, value: string) => {
+      page.drawText(label.toUpperCase(), { x, y: top, size: 7.5, font: bold, color: MUTED });
+      page.drawText(value || 'not recorded', {
+        x,
+        y: top - 14,
+        size: 9.5,
+        font: body,
+        color: INK,
+      });
+    };
 
-    y -= 28;
+    fact(margin, y, 'Signed at', formatStamp(evidence.signedAt));
+    fact(margin + half, y, 'IP address', evidence.ip);
+    fact(margin, y - 40, 'Device', evidence.userAgent.slice(0, 46));
+    fact(margin + half, y - 40, 'Method', 'Whole-document acceptance');
+
+    y -= 84;
+
+    // ---- The fingerprint, given its own block because it is the evidence.
+    page.drawLine({
+      start: { x: margin, y },
+      end: { x: margin + inner, y },
+      thickness: 1,
+      color: LINE,
+    });
+    y -= 22;
+
+    page.drawText('DOCUMENT FINGERPRINT (SHA-256)', {
+      x: margin,
+      y,
+      size: 7.5,
+      font: bold,
+      color: MUTED,
+    });
+    // Split across two lines: 64 characters do not fit the page at a legible
+    // size, and a truncated fingerprint proves nothing.
+    page.drawText(evidence.documentChecksum.slice(0, 32), {
+      x: margin,
+      y: y - 16,
+      size: 9.5,
+      font: mono,
+      color: INK,
+    });
+    page.drawText(evidence.documentChecksum.slice(32), {
+      x: margin,
+      y: y - 30,
+      size: 9.5,
+      font: mono,
+      color: INK,
+    });
+
+    y -= 58;
     page.drawText(
-      'This page was added when the document was signed. The fingerprint above is of',
-      { x: left, y, size: 8, font: body, color: MUTED }
+      'This page was added when the document was signed. The fingerprint above is of the',
+      { x: margin, y, size: 8, font: body, color: MUTED }
     );
-    y -= 11;
     page.drawText(
-      'the document as it was sent; the pages before this one are unchanged.',
-      { x: left, y, size: 8, font: body, color: MUTED }
+      'document as it was sent; the pages before this one are unchanged.',
+      { x: margin, y: y - 11, size: 8, font: body, color: MUTED }
     );
 
     return Buffer.from(await pdf.save());
