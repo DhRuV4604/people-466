@@ -75,8 +75,10 @@ export default async function ProfilePage() {
   return (
     <>
 
+      {/* A grid item is min-width:auto by default, so an unbreakable value —
+          the user id is a cuid — would widen the column past the viewport. */}
       <div className="grid gap-6 lg:grid-cols-[320px_minmax(0,1fr)]">
-        <Card className="h-fit">
+        <Card className="h-fit min-w-0">
           <CardHeader className="items-start gap-4">
             <UserAvatar name={user.name} size="lg" />
             <div>
@@ -103,7 +105,7 @@ export default async function ProfilePage() {
           </CardContent>
         </Card>
 
-        <Card>
+        <Card className="min-w-0">
           <CardHeader>
             <CardTitle>Permissions</CardTitle>
             <CardDescription>

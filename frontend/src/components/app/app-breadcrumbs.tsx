@@ -45,14 +45,25 @@ function labelFor(segment: string, parent: string | undefined) {
   return segment.charAt(0).toUpperCase() + segment.slice(1).replace(/-/g, " ");
 }
 
-export function AppBreadcrumbs() {
+export function AppBreadcrumbs({
+  /**
+   * Whether this role can open the overview. Not every one can, and leading
+   * every trail with a crumb that bounces the user straight back is worse than
+   * a shorter trail.
+   */
+  hasOverview = true,
+}: {
+  hasOverview?: boolean;
+}) {
   const pathname = usePathname();
   const segments = pathname.split("/").filter(Boolean);
 
-  // The overview is the root, so it leads the trail everywhere else and is the
-  // current page at "/".
   const crumbs = [
-    { label: "Overview", href: "/", isLast: segments.length === 0 },
+    // The overview is the root, so it leads the trail everywhere else and is
+    // the current page at "/".
+    ...(hasOverview
+      ? [{ label: "Overview", href: "/", isLast: segments.length === 0 }]
+      : []),
     ...segments.map((segment, index) => ({
       label: labelFor(segment, segments[index - 1]),
       href: `/${segments.slice(0, index + 1).join("/")}`,

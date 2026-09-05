@@ -68,6 +68,12 @@ export { Skeleton } from "./skeleton";
 export { ConfirmDialog, type ConfirmDialogProps } from "./confirm-dialog";
 export { ToastProvider, useToast } from "./toast";
 export {
+  ThemeProvider,
+  useTheme,
+  type Theme,
+  type Resolved,
+} from "./theme";
+export {
   DropdownMenuLinkItem,
   type DropdownMenuLinkItemProps,
 } from "./menu-link-item";

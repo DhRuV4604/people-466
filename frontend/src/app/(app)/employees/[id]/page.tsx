@@ -15,6 +15,10 @@ import {
 } from "lucide-react";
 import { can, type EmployeeDetailDto } from "@peoplepay360/shared";
 
+import {
+  LeaveBalances,
+  loadBalances,
+} from "@/app/(app)/time-off/_components/leave-balances";
 import { ActionButton, RecordDialog } from "@/components/form";
 import {
   BackLink,
@@ -69,14 +73,19 @@ export default async function EmployeePage({ params }: PageProps) {
   const { id } = await params;
   const canUpdate = can(session.role, "employees", "update");
   const canDelete = can(session.role, "employees", "delete");
+  const canReadBalances = can(session.role, "timeOffAllocations", "read");
 
-  const [employee, refs] = await Promise.all([
+  const [employee, refs, balances] = await Promise.all([
     getEmployee(id),
     // Only the edit form needs them, so a role that can only read this record
     // does not pay for four extra lookups.
     canUpdate
       ? loadRefs(["departments", "positions", "schedules", "employees"])
       : null,
+    // The API pins an Employee to their own balances whatever id is asked for,
+    // which is safe here because the same role gets a 404 on anyone else's
+    // record and never reaches this page with someone else's id.
+    canReadBalances ? loadBalances(id) : null,
   ]);
   if (!employee) notFound();
 
@@ -259,6 +268,14 @@ export default async function EmployeePage({ params }: PageProps) {
               ) : null}
             </CardContent>
           </Card>
+
+
+          {balances ? (
+            <LeaveBalances
+              rows={balances}
+              description={`Where ${employee.fullName} stands today: approved allocations less approved leave.`}
+            />
+          ) : null}
 
           <Card>
             <CardHeader>

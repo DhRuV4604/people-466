@@ -20,6 +20,7 @@ import {
 import {
   ROLE_LABELS,
   can,
+  type Action,
   type AuthUser,
   type Module,
 } from "@peoplepay360/shared";
@@ -55,6 +56,12 @@ type NavItem = {
   icon: React.ComponentType<{ className?: string }>;
   /** The permission that decides whether this appears at all. */
   module: Module;
+  /**
+   * The action to check, when reading is not the point of the screen. Settings
+   * is the case: every role may read a working schedule, but only the roles
+   * that can change one have any reason to open the page.
+   */
+  action?: Action;
 };
 
 /**
@@ -133,6 +140,7 @@ const GROUPS: { label: string; items: NavItem[] }[] = [
       {
         href: "/settings",
         label: "Settings",
+        action: "update",
         icon: Settings,
         module: "workingSchedules",
       },
@@ -140,13 +148,22 @@ const GROUPS: { label: string; items: NavItem[] }[] = [
   },
 ];
 
-export function AppSidebar({ user }: { user: AuthUser }) {
+export function AppSidebar({
+  user,
+  /** Where the wordmark goes. Not every role can open the overview. */
+  home = "/",
+}: {
+  user: AuthUser;
+  home?: string;
+}) {
   const pathname = usePathname();
   const roleLabel = ROLE_LABELS[user.role];
 
   const groups = GROUPS.map((group) => ({
     ...group,
-    items: group.items.filter((item) => can(user.role, item.module, "read")),
+    items: group.items.filter((item) =>
+      can(user.role, item.module, item.action ?? "read"),
+    ),
   })).filter((group) => group.items.length > 0);
 
   return (
@@ -155,7 +172,7 @@ export function AppSidebar({ user }: { user: AuthUser }) {
         <SidebarMenu>
           <SidebarMenuItem>
             <SidebarMenuButton asChild size="lg" tooltip="PeoplePay360">
-              <Link href="/">
+              <Link href={home}>
                 <span className="flex aspect-square size-8 shrink-0 items-center justify-center rounded-lg bg-primary text-primary-foreground">
                   <Users size={17} />
                 </span>

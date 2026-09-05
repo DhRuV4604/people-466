@@ -119,7 +119,9 @@ export function EmployeeCards({ employees, canDelete }: ViewProps) {
   return (
     <ul className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
       {employees.map((employee) => (
-        <li key={employee.id}>
+        // min-w-0: a grid item sizes to its content by default, and an email
+        // address has no break points, so the card would outgrow the column.
+        <li key={employee.id} className="min-w-0">
           <Card className="relative h-full transition-colors hover:border-primary/40">
             <Link
               href={`/employees/${employee.id}`}

@@ -1,8 +1,10 @@
 "use server";
 
 import { redirect } from "next/navigation";
+import type { SendPayslipsResultDto } from "@peoplepay360/shared";
 
 import { readForm } from "@/lib/fields";
+import { pluralise } from "@/lib/format";
 import {
   callAction,
   deleteRecord,
@@ -94,9 +96,14 @@ export async function markPayrunPaid(id: string): Promise<FormState> {
 }
 
 export async function sendPayslips(id: string): Promise<FormState> {
-  return callAction({
+  return callAction<SendPayslipsResultDto>({
     path: `/payruns/${id}/send-payslips`,
-    message: "Payslips sent.",
+    // The API sends one payslip at a time and carries on past a failure, so
+    // "sent" on its own would report a partial delivery as a success.
+    message: ({ sent, failed }) =>
+      failed === 0
+        ? `${pluralise(sent, "payslip")} sent.`
+        : `${pluralise(sent, "payslip")} sent, ${failed} failed. Payslip delivery on this run says why.`,
   });
 }
 

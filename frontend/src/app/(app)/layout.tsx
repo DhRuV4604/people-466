@@ -7,7 +7,9 @@ import {
   SidebarInset,
   SidebarProvider,
   SidebarTrigger,
+  ThemeTogglerButton,
 } from "@/components/ui";
+import { landingFor } from "@/lib/access";
 import { getSession } from "@/lib/session";
 
 /**
@@ -28,15 +30,26 @@ export default async function AppLayout({
   const user = await getSession();
   if (!user) redirect("/login");
 
+  // Not every role can open the overview, so the wordmark and the trail both
+  // start from the first screen this one can.
+  const home = landingFor(user);
+
   return (
     <SidebarProvider>
-      <AppSidebar user={user} />
+      <AppSidebar user={user} home={home} />
       {/* min-w-0 lets the inset shrink below its content width, so long rows
           truncate instead of pushing the page sideways. */}
       <SidebarInset className="min-w-0">
         <header className="sticky top-0 z-10 flex h-16 shrink-0 items-center gap-3 border-b border-border bg-background/80 px-4 backdrop-blur-sm sm:px-6">
           <SidebarTrigger className="-ml-1" />
-          <AppBreadcrumbs />
+          <AppBreadcrumbs hasOverview={home === "/"} />
+          {/* Right-aligned: it belongs to the window rather than to the page,
+              so it sits away from the trail that names where you are. */}
+          <ThemeTogglerButton
+            className="ml-auto"
+            variant="ghost"
+            modes={["light", "dark", "system"]}
+          />
         </header>
         <div className="flex min-w-0 flex-1 flex-col gap-8 p-4 sm:p-6 lg:p-8">
           {children}

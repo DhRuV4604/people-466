@@ -1,8 +1,10 @@
 import type { Metadata } from "next";
+import { redirect } from "next/navigation";
 import { CalendarClock, LogIn, LogOut } from "lucide-react";
 import {
   ATTENDANCE_STATUSES,
   can,
+  scopeToOwnRecords,
   type AttendanceDto,
   type AttendanceSummaryDto,
 } from "@peoplepay360/shared";
@@ -19,12 +21,19 @@ import { StatusBadge } from "@/components/data/status-badge";
 import { ActionButton, RecordDialog, RowActions } from "@/components/form";
 import { Badge } from "@/components/ui";
 import { apiFetch } from "@/lib/api-client";
-import { formatDate, formatTime, hours, percent } from "@/lib/format";
+import {
+  dateRange,
+  formatDate,
+  formatTime,
+  hours,
+  percent,
+} from "@/lib/format";
 import { loadRefs } from "@/lib/refs";
 import { statusOptions } from "@/lib/status";
 import { requireAccess } from "@/lib/access";
 
 import { attendanceEditFields, attendanceFields } from "./fields";
+import { PERIOD_OPTIONS, attendancePeriod } from "./period";
 import {
   checkIn,
   checkOut,
@@ -38,7 +47,63 @@ export const metadata: Metadata = {
   description: "Punches, exceptions and corrections.",
 };
 
-type SearchParams = Promise<{ q?: string; status?: string }>;
+/**
+ * The API will hand over up to 1000 rows, but a table that long is slow to
+ * render and nobody reads to the end of it. A window holding more than this
+ * says so under the filters rather than truncating in silence.
+ */
+const LIMIT = 200;
+
+type Filters = {
+  q?: string;
+  status?: string;
+  period?: string;
+  employee?: string;
+};
+
+type SearchParams = Promise<Filters>;
+
+/** The id shape the API validates a filter against. Anything else is a 400. */
+const ENTITY_ID = /^[A-Za-z0-9_-]{16,64}$/;
+
+/**
+ * The URL a hand-written filter should have had, or null when it already is
+ * that one. A status or an employee id the API does not recognise comes back
+ * as a 400 and takes the whole screen down; an unrecognised period is ignored,
+ * leaving a chip naming a window the list is not showing. Dropping the key
+ * answers both, and rewriting the URL keeps a link honest about what it opens.
+ */
+function canonicalUrl(params: Filters, canPickEmployee: boolean): string | null {
+  const period = PERIOD_OPTIONS.some((option) => option.value === params.period)
+    ? params.period
+    : undefined;
+  const status = ATTENDANCE_STATUSES.some((value) => value === params.status)
+    ? params.status
+    : undefined;
+  const employee =
+    canPickEmployee && ENTITY_ID.test(params.employee ?? "")
+      ? params.employee
+      : undefined;
+
+  const dropped =
+    (params.period !== undefined && period === undefined) ||
+    (params.status !== undefined && status === undefined) ||
+    (params.employee !== undefined && employee === undefined);
+  if (!dropped) return null;
+
+  const kept = new URLSearchParams();
+  for (const [key, value] of Object.entries({
+    q: params.q,
+    period,
+    employee,
+    status,
+  })) {
+    if (value) kept.set(key, value);
+  }
+
+  const query = kept.toString();
+  return query ? `/attendance?${query}` : "/attendance";
+}
 
 export default async function AttendancePage({
   searchParams,
@@ -48,13 +113,45 @@ export default async function AttendancePage({
   const session = await requireAccess("attendance");
 
   const params = await searchParams;
-  const [records, summary, refs] = await Promise.all([
+
+  // An employee's list is already scoped to their own records, so a picker of
+  // other people would be noise. The value is dropped for that role rather
+  // than forwarded, so a hand-written URL cannot widen what they see either.
+  const canPickEmployee = !scopeToOwnRecords(session.role);
+
+  const canonical = canonicalUrl(params, canPickEmployee);
+  if (canonical) redirect(canonical);
+
+  const period = attendancePeriod(params.period);
+  const employeeId = canPickEmployee ? params.employee : undefined;
+
+  // The summary takes the same window and employee, so the tiles describe the
+  // rows underneath them rather than some other slice of the year.
+  const [fetched, summary, refs] = await Promise.all([
     apiFetch<AttendanceDto[]>("/attendance", {
-      query: { q: params.q, status: params.status, limit: 200 },
+      query: {
+        q: params.q,
+        status: params.status,
+        employeeId,
+        from: period.from,
+        to: period.to,
+        limit: LIMIT + 1,
+      },
     }),
-    apiFetch<AttendanceSummaryDto>("/attendance/summary"),
+    apiFetch<AttendanceSummaryDto>("/attendance/summary", {
+      query: { employeeId, from: period.from, to: period.to },
+    }),
     loadRefs(["employees"]),
   ]);
+
+  // The row past the cap is asked for and never shown: its presence is what
+  // says rows were left off the end. Reading that from the summary instead
+  // would misfire, because the summary cannot see the status or search filter.
+  const truncated = fetched.length > LIMIT;
+  const records = truncated ? fetched.slice(0, LIMIT) : fetched;
+
+  const windowLabel = dateRange(period.from, period.to);
+  const hasFilters = Boolean(params.q || params.status || employeeId);
 
   const canCreate = can(session.role, "attendance", "create");
   const canUpdate = can(session.role, "attendance", "update");
@@ -111,9 +208,15 @@ export default async function AttendancePage({
       <StatGrid>
         <StatTile
           label="Health"
-          value={percent(summary.healthPercent)}
-          hint={`${summary.totalRecords} records`}
-          tone={summary.healthPercent < 80 ? "danger" : "neutral"}
+          // The API calls an empty window 100% healthy, which on a narrow
+          // period reads as a perfect week rather than as no data at all.
+          value={summary.totalRecords > 0 ? percent(summary.healthPercent) : "—"}
+          hint={`${summary.totalRecords} records · ${period.label}`}
+          tone={
+            summary.totalRecords > 0 && summary.healthPercent < 80
+              ? "danger"
+              : "neutral"
+          }
         />
         <StatTile
           label="Worked"
@@ -140,6 +243,24 @@ export default async function AttendancePage({
       <FilterBar
         search={{ placeholder: "Search employee" }}
         selects={[
+          {
+            key: "period",
+            // Clearing the key is what "this month" means, so the placeholder
+            // entry is the default rather than an absence of one.
+            placeholder: "This month",
+            options: PERIOD_OPTIONS,
+            width: "w-40",
+          },
+          ...(canPickEmployee
+            ? [
+                {
+                  key: "employee",
+                  placeholder: "All employees",
+                  options: refs.employees,
+                  width: "w-56",
+                },
+              ]
+            : []),
           {
             key: "status",
             placeholder: "Any status",
@@ -191,11 +312,29 @@ export default async function AttendancePage({
         }
       />
 
+      {truncated ? (
+        <p className="text-xs text-muted-foreground">
+          Showing the most recent {LIMIT} records of {windowLabel}. Narrow the
+          period{canPickEmployee ? ", or pick an employee," : ""} to see the
+          rest.
+        </p>
+      ) : null}
+
       {records.length === 0 ? (
         <EmptyState
           icon={CalendarClock}
-          title="No attendance records match"
-          description="Try a broader search, or clear a filter to widen the results."
+          title={
+            hasFilters
+              ? "Nothing matches in this period"
+              : "No attendance in this period"
+          }
+          // Naming the window matters: an empty list is otherwise read as "this
+          // employee has no attendance at all" rather than "none in July".
+          description={
+            hasFilters
+              ? `No record between ${windowLabel} matches these filters. Try a wider period, or clear a filter.`
+              : `Nothing was punched between ${windowLabel}. Pick a wider period to look further back.`
+          }
         />
       ) : (
         <DataTable

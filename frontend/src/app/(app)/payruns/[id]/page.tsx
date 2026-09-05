@@ -8,7 +8,12 @@ import {
   Send,
   Trash2,
 } from "lucide-react";
-import { can, type PayrunDto, type PayrunStatus } from "@peoplepay360/shared";
+import {
+  can,
+  type EmailLogDto,
+  type PayrunDto,
+  type PayrunStatus,
+} from "@peoplepay360/shared";
 
 import { DataTable } from "@/components/data/data-table";
 import {
@@ -26,6 +31,7 @@ import { ApiError, apiFetch } from "@/lib/api-client";
 import {
   dateRange,
   formatDate,
+  formatTime,
   money,
   moneyShort,
   pluralise,
@@ -50,6 +56,54 @@ async function getPayrun(id: string): Promise<PayrunDto | null> {
   } catch (error) {
     if (error instanceof ApiError && error.status === 404) return null;
     throw error;
+  }
+}
+
+/** Mirrors the `take` in the API's findLogs(): the outbox is not paginated. */
+const OUTBOX_LIMIT = 200;
+
+type Outbox = {
+  attempts: EmailLogDto[];
+  /** The response came back at the cap, so older attempts may be cut off. */
+  partial: boolean;
+  /** The outbox could not be read at all. */
+  unavailable: boolean;
+};
+
+/**
+ * The outbox for one run. `/email-logs` takes no query and returns only the
+ * most recent 200 attempts across every run, so this run's are picked out
+ * here, and a window that could have cut some of them off is reported as
+ * incomplete rather than passed off as the whole story.
+ */
+async function getDeliveries(payrun: PayrunDto): Promise<Outbox> {
+  try {
+    const logs = await apiFetch<EmailLogDto[]>("/email-logs");
+
+    // Rows fall off the old end of that window. Nothing for this run can have
+    // been lost while the window still reaches back past the run's own
+    // creation, which keeps the warning off every page of a busy outbox and
+    // on the runs where it is actually true. Both are ISO UTC, so comparing
+    // them as strings is comparing the instants.
+    const oldest = logs.reduce<string | null>(
+      (earliest, log) =>
+        earliest === null || log.sentAt < earliest ? log.sentAt : earliest,
+      null,
+    );
+
+    return {
+      attempts: logs.filter((log) => log.payrunId === payrun.id),
+      partial:
+        logs.length >= OUTBOX_LIMIT &&
+        oldest !== null &&
+        oldest > payrun.createdAt,
+      unavailable: false,
+    };
+  } catch (error) {
+    if (!(error instanceof ApiError)) throw error;
+    // Delivery is a footnote to the run. Losing it should not cost the reader
+    // the figures they came for.
+    return { attempts: [], partial: false, unavailable: true };
   }
 }
 
@@ -95,6 +149,14 @@ export default async function PayrunPage({ params }: PageProps) {
     ? (departments.find((option) => option.value === payrun.departmentFilter)
         ?.label ?? payrun.departmentFilter)
     : "All departments";
+
+  // The outbox is a payslips permission, not a payruns one, so a role that can
+  // open the run is not guaranteed to be allowed the delivery record. The API
+  // refuses to send from a draft, so delivery is not yet a question there.
+  const outbox =
+    payrun.status !== "DRAFT" && can(session.role, "payslips", "read")
+      ? await getDeliveries(payrun)
+      : null;
 
   return (
     <>
@@ -254,6 +316,10 @@ export default async function PayrunPage({ params }: PageProps) {
         </FactGrid>
       </Section>
 
+      {/* "Have these gone out?" is answered whether or not they have: an
+          absent panel would read as a missing panel, not as a no. */}
+      {outbox ? <PayslipDelivery outbox={outbox} /> : null}
+
       <div className="flex flex-col gap-4">
         <h2 className="text-lg font-semibold tracking-tight">Payslips</h2>
         {payslips.length === 0 ? (
@@ -322,5 +388,112 @@ export default async function PayrunPage({ params }: PageProps) {
         )}
       </div>
     </>
+  );
+}
+
+/**
+ * Who each payslip was emailed to and what came of it. Sending again records a
+ * fresh attempt rather than replacing the last one, so a run can carry several
+ * attempts for the same person and the newest is at the top.
+ */
+function PayslipDelivery({ outbox }: { outbox: Outbox }) {
+  const { partial, unavailable } = outbox;
+
+  // Sorted here rather than trusted from the API, so "most recent first" and
+  // "last attempt" stay true however the endpoint chooses to order itself.
+  const attempts = [...outbox.attempts].sort((a, b) =>
+    b.sentAt.localeCompare(a.sentAt),
+  );
+  const sent = attempts.filter((attempt) => attempt.status === "SENT").length;
+  const failed = attempts.filter(
+    (attempt) => attempt.status === "FAILED",
+  ).length;
+
+  if (attempts.length === 0) {
+    return (
+      <Section title="Payslip delivery">
+        <p className="text-sm text-muted-foreground">
+          {unavailable
+            ? "The delivery record could not be read, so whether these payslips have been emailed is not known."
+            : partial
+              ? `Nothing for this run is in the outbox, but the outbox only keeps the most recent ${OUTBOX_LIMIT} attempts across every pay run, so an earlier send may have dropped out of it.`
+              : "No payslip from this run has been emailed yet."}
+        </p>
+      </Section>
+    );
+  }
+
+  return (
+    <Section
+      title="Payslip delivery"
+      description="Every attempt to email a payslip from this run, most recent first."
+    >
+      <FactGrid columns={4}>
+        <Fact label="Attempts">{attempts.length}</Fact>
+        <Fact label="Sent">{sent}</Fact>
+        <Fact label="Failed">
+          <span
+            className={failed > 0 ? "font-medium text-destructive" : undefined}
+          >
+            {failed}
+          </span>
+        </Fact>
+        <Fact label="Last attempt">
+          {`${formatDate(attempts[0].sentAt)} · ${formatTime(attempts[0].sentAt)}`}
+        </Fact>
+      </FactGrid>
+
+      {/* The endpoint has no filter and no paging, so once it is full these
+          counts are a floor rather than the total. Saying so beats quietly
+          under-reporting a send. */}
+      {partial ? (
+        <p className="mt-4 text-xs text-muted-foreground">
+          The outbox only keeps the most recent {OUTBOX_LIMIT} attempts across
+          every pay run, so an earlier attempt for this run may be missing from
+          these figures.
+        </p>
+      ) : null}
+
+      <DataTable
+        className="mt-4"
+        rows={attempts}
+        getKey={(row) => row.id}
+        columns={[
+          {
+            header: "Recipient",
+            className: "min-w-[240px]",
+            cell: (row) => (
+              <>
+                {/* An attempt with no name on it is identified by the address
+                    alone, rather than printing it twice. */}
+                <PersonCell
+                  name={row.toName ?? row.toEmail}
+                  meta={row.toName ? row.toEmail : null}
+                />
+                {/* A failure whose reason is hidden is the reason this panel
+                    exists, so the API's own text is printed on the row. */}
+                {row.error ? (
+                  <p className="mt-1 text-xs text-destructive">{row.error}</p>
+                ) : null}
+              </>
+            ),
+          },
+          {
+            header: "Attempted",
+            hideBelow: "sm",
+            cell: (row) => (
+              <span className="whitespace-nowrap tabular-nums text-muted-foreground">
+                {formatDate(row.sentAt)} · {formatTime(row.sentAt)}
+              </span>
+            ),
+          },
+          {
+            header: "Status",
+            align: "right",
+            cell: (row) => <StatusBadge value={row.status} />,
+          },
+        ]}
+      />
+    </Section>
   );
 }
