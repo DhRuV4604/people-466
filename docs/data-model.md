@@ -15,14 +15,17 @@ describes and the rules the services enforce on top of it.
       Department ────►│   Employee   │◄──── JobPosition
                       └──────┬───────┘
                              │        └───► manager → Employee (self)
-        ┌────────────┬───────┼────────────┬──────────────┐
-        ▼            ▼       ▼            ▼              ▼
-    Contract    Attendance  LeaveAllocation  LeaveRequest  Payslip
-        │                          ▲             │
-        │                          └─────────────┘  approving links them
-        ▼
+        ┌────────────┬───────┼────────────┬──────────┬──────────┐
+        ▼            ▼       ▼            ▼          ▼          ▼
+    Contract    Attendance  LeaveAllocation  LeaveRequest  Payslip  Document
+        │                          ▲             │                     │
+        │                          └─────────────┘  approving links them│
+        ▼                                                              ▼
   SalaryStructure ──► SalaryRule          Payrun ──► Payslip ──► PayslipLine
   WorkingSchedule ──► WorkingScheduleLine            EmailLog
+
+  StoredFile ──► the bytes behind a document, its signed copy,
+                 an employee's avatar, and the company logo
 ```
 
 **The employee record is the hub.** Everything daily hangs off it, and payroll reads through it.
@@ -178,6 +181,44 @@ Warnings are surfaced before validation and **block** it:
 on failure, the error. With no `SMTP_HOST` configured it records the attempt instead of dialling
 out, so the flow is demonstrable without credentials.
 
+## A payslip belongs to the month its period ends in
+
+Payroll periods straddle month boundaries as a matter of course — a run from 31 July to 31 August
+is ordinary — so "which month is this payslip in" has to be decided rather than assumed. Both
+obvious answers are wrong:
+
+| Test | What goes wrong |
+|---|---|
+| Contained by the month (`periodStart >= start AND periodEnd <= end`) | Excludes exactly the straddling runs. The dashboard opened on "the latest month with payroll" and then reported it as having none. |
+| Overlapping the month | Two runs touch July, so July shows twice its own payroll. |
+
+So the rule is the **end date alone** — `periodEnd BETWEEN start AND end` — which is also what a
+pay run is named for. The dashboard applies it in three places that have to agree: choosing the
+month it opens on, bucketing the twelve-month trend, and filtering pay runs.
+
+## Documents are one model in both directions
+
+`Document` covers HR sending something to be signed and HR asking for a file, because they are
+the same object at different points: something is outstanding, then it is not. One status list
+spans both — `DRAFT` → `AWAITING_SIGNATURE` → `SIGNED`, and `REQUESTED` → `SUBMITTED`.
+
+`fileId` is null while a document is `REQUESTED`: nothing exists yet. `signedFileId` is a second
+file written on signing, so the original is never modified — the certificate refers to the bytes
+as they were sent, and that has to stay checkable.
+
+The signature evidence is stored on the row rather than read through relations: `signerName`,
+`signerEmail`, `signerIp`, `signerUserAgent`, `signedChecksum` and the signature image. The point
+of a record is that it still says what happened after the person's name or the file has changed.
+
+`StoredFile` is bytes on disk described by a row — a generated key, the original filename for
+display only, a mime type, a size and a SHA-256 checksum. Four things point at it: a document's
+original, a document's signed copy, an employee's avatar and the company logo.
+
+The seed creates no documents or avatars; both are made through the app.
+
+[documents.md](documents.md) covers the lifecycle, the storage rules, signing and the AI bridge
+in full.
+
 ## Enumerations
 
 All in `shared/src/enums.ts` as plain const objects rather than TypeScript `enum`s, so
@@ -199,9 +240,14 @@ the values survive JSON transport unchanged and can be iterated to build a selec
 | `ComputeType` | `FIXED` `PERCENTAGE` `FORMULA` |
 | `PayrunStatus` / `PayslipStatus` | `DRAFT` `COMPUTED` `VALIDATED` `PAID` `CANCELLED` |
 | `EmailStatus` | `QUEUED` `SENT` `FAILED` |
+| `DocumentKind` | `JOINING_LETTER` `OFFER_LETTER` `NDA` `CONTRACT` `POLICY` `ID_PROOF` `ADDRESS_PROOF` `QUALIFICATION` `OTHER` |
+| `DocumentStatus` | `DRAFT` `REQUESTED` `AWAITING_SIGNATURE` `SUBMITTED` `SIGNED` `DECLINED` `CANCELLED` |
 
 The web client maps every one of these to a label and a tone in `frontend/src/lib/status.ts`, so
 a status reads the same wherever it appears.
+
+The two document enums live in `shared/src/types.ts` rather than `enums.ts`, beside the DTOs
+that use them.
 
 ## Migrations and seed
 
@@ -216,12 +262,13 @@ The seed is deliberately imperfect so the warning paths are demonstrable: two em
 bank details, several attendance records are missing a check-out or were manually corrected, and
 some contracts expire within 30 days.
 
-`20260905170408_one_identity_per_person` is hand-written rather than generated, because making
-`Employee.userId` required on a database that already holds payroll history is not a change
-Prisma can make on its own. It backfills in both directions before adding the constraint: an
-account for every employee that lacked one, and an employee for every account that lacked one,
-continuing the existing `EMP####` sequence rather than restarting it. Nothing is deleted.
+There are three migrations:
 
-The accounts it creates are inactive and carry a bcrypt digest of a value nobody holds, so the
-migration cannot hand anyone a way in as a side effect. `POST /employees/:id/reinvite` is how
-they are brought online.
+| Migration | What it adds |
+|---|---|
+| `20260905181250_init` | The whole schema as it stood, including the required `Employee.userId`. Earlier hand-written migrations — notably the one that backfilled an account for every employee and an employee for every account before making that column required — were squashed into it. |
+| `20260905185350_documents_and_files` | `StoredFile`, `Document`, `DocumentKind`, `DocumentStatus`, and `Employee.avatarId`. |
+| `20260905201838_company_details` | The company profile columns and logo on `AppSettings`. |
+
+A database created before the last two will not have the document tables, and the documents
+screens will fail until `npm run db:migrate` (or `db:deploy`) is run.

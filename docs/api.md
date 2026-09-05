@@ -375,9 +375,28 @@ from a client.
 |---|---|---|
 | `GET` | `/dashboard` | `dashboard:read` |
 
-One aggregate: KPIs, salary by department, a monthly trend, attendance health, time-off totals,
-and the alert lists the overview links from (missing bank details, no contract, expiring
-contracts, duplicate payslips, draft pay runs).
+One aggregate, so the overview is a single round trip: `period`, KPIs, salary by department, a
+twelve-month trend, attendance health, time-off totals, `alerts`, and `tasks`.
+
+`period` is **not always the current month** — the API opens on the latest month that has
+payroll, so a dashboard read in September may describe August. Anything phrased as a problem has
+to name the month, or "no contract" reads as "you never made one" when the truth is "not for the
+month being shown".
+
+`tasks` is the outstanding work the task strip renders. `alerts` is the same facts in an older,
+flatter shape; the overview no longer draws it, but it remains on the response.
+
+`tasks` is a list of `{ kind, count, subjects }`. The eight kinds are `PENDING_LEAVE`,
+`MISSING_BANK`, `NO_CONTRACT`, `NEVER_INVITED`, `AWAITING_SIGNATURE`, `DRAFT_PAYRUN`,
+`EXPIRING_CONTRACT` and `MISSING_CHECKOUT`. `count` is the real total; `subjects` is a sample
+(at most 20) carrying a name, a line of context, and `avatarFileId`/`employeeId` so a card can
+show faces without a request per row. The counts are queried apart from the samples, so a
+truncated sample never understates the number.
+
+**A payslip belongs to the month its period ends in.** The filter is `periodEnd` between the
+month's bounds, not a period contained by it — payroll periods straddle month boundaries
+routinely, and containment would exclude exactly those runs. The same rule picks the opening
+month, buckets the trend and filters pay runs.
 
 ## Known rough edges
 
