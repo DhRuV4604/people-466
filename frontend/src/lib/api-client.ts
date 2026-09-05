@@ -164,3 +164,44 @@ export async function apiFetch<T>(
 
   return payload as T;
 }
+
+/**
+ * Uploads a file.
+ *
+ * Separate from `apiFetch` because a multipart body is the one thing it cannot
+ * carry: it sets a JSON content type and serialises what it is given, and
+ * `FormData` needs fetch to write its own boundary header instead.
+ */
+export async function apiUpload<T>(
+  path: string,
+  form: FormData,
+): Promise<T> {
+  const token = await getToken();
+
+  let response: Response;
+  try {
+    response = await fetch(buildUrl(path), {
+      method: "POST",
+      headers: token ? { Authorization: `Bearer ${token}` } : undefined,
+      body: form,
+      cache: "no-store",
+    });
+  } catch {
+    throw new ApiError(503, "Cannot reach the API. Is it running?");
+  }
+
+  if (response.status === 401) redirect("/signed-out");
+  if (response.status === 204) return undefined as T;
+
+  const payload = await response.json().catch(() => null);
+  if (!response.ok) {
+    const { message, details } = readError(
+      payload,
+      response.status,
+      response.statusText,
+    );
+    throw new ApiError(response.status, message, details);
+  }
+
+  return payload as T;
+}

@@ -21,6 +21,7 @@ const LABELS: Record<string, string> = {
   "time-off": "Time off",
   payruns: "Pay runs",
   payslips: "Payslips",
+  documents: "Documents",
   salary: "Salary",
   settings: "Settings",
   audit: "Audit trail",
@@ -38,6 +39,7 @@ const DETAIL_LABELS: Record<string, string> = {
   contracts: "Contract",
   payruns: "Pay run",
   payslips: "Payslip",
+  documents: "Document",
 };
 
 function labelFor(segment: string, parent: string | undefined) {

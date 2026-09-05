@@ -1,4 +1,9 @@
-import type { EmployeeStatus, EmployeeType } from "@peoplepay360/shared";
+import type {
+  DocumentKind,
+  DocumentStatus,
+  EmployeeStatus,
+  EmployeeType,
+} from "@peoplepay360/shared";
 
 /**
  * Display labels and formatting. The API speaks in enum constants; screens
@@ -27,6 +32,54 @@ export const EMPLOYEE_STATUS_TONE: Record<
   ON_LEAVE: "outline",
   INACTIVE: "destructive",
 };
+
+export const DOCUMENT_KIND_LABELS: Record<DocumentKind, string> = {
+  JOINING_LETTER: "Joining letter",
+  OFFER_LETTER: "Offer letter",
+  NDA: "NDA",
+  CONTRACT: "Contract",
+  POLICY: "Policy",
+  ID_PROOF: "ID proof",
+  ADDRESS_PROOF: "Address proof",
+  QUALIFICATION: "Qualification",
+  OTHER: "Other",
+};
+
+/**
+ * Worded from the reader's side rather than the database's. "Awaiting
+ * signature" is what HR is waiting for; the employee sees the same row and
+ * needs to know it is waiting on them, which is what the copy on their own
+ * screen says instead.
+ */
+export const DOCUMENT_STATUS_LABELS: Record<DocumentStatus, string> = {
+  DRAFT: "Draft",
+  REQUESTED: "Requested",
+  AWAITING_SIGNATURE: "Awaiting signature",
+  SUBMITTED: "On file",
+  SIGNED: "Signed",
+  DECLINED: "Declined",
+  CANCELLED: "Withdrawn",
+};
+
+export const DOCUMENT_STATUS_TONE: Record<
+  DocumentStatus,
+  "default" | "secondary" | "outline" | "destructive"
+> = {
+  DRAFT: "outline",
+  REQUESTED: "default",
+  AWAITING_SIGNATURE: "default",
+  SUBMITTED: "secondary",
+  SIGNED: "secondary",
+  DECLINED: "destructive",
+  CANCELLED: "outline",
+};
+
+/** Human file size, for a list where the number is a hint and not a fact. */
+export function fileSize(bytes: number): string {
+  if (bytes < 1024) return `${bytes} B`;
+  if (bytes < 1024 * 1024) return `${Math.round(bytes / 1024)} KB`;
+  return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+}
 
 /** Two letters from a display name, for avatars with no photo. */
 export function initials(name: string): string {
@@ -103,4 +156,26 @@ export function formatTime(iso: string | null | undefined): string {
     hour12: false,
     timeZone: "UTC",
   }).format(date);
+}
+
+/**
+ * Day and clock time together, for an audit trail.
+ *
+ * UTC, and said so: a certificate that reports the signing time in whatever
+ * zone the reader happens to be in is a certificate two people can disagree
+ * about.
+ */
+export function formatDateTime(iso: string | null | undefined): string {
+  if (!iso) return "—";
+  const date = new Date(iso);
+  if (Number.isNaN(date.getTime())) return "—";
+  return `${new Intl.DateTimeFormat("en-GB", {
+    day: "numeric",
+    month: "short",
+    year: "numeric",
+    hour: "2-digit",
+    minute: "2-digit",
+    hour12: false,
+    timeZone: "UTC",
+  }).format(date)} UTC`;
 }

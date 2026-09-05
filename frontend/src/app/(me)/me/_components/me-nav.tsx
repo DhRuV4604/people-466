@@ -3,7 +3,14 @@
 import type * as React from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { CalendarOff, Clock3, House, UserRound, Wallet } from "lucide-react";
+import {
+  CalendarOff,
+  Clock3,
+  FileSignature,
+  House,
+  UserRound,
+  Wallet,
+} from "lucide-react";
 
 import { cn } from "@/lib/utils";
 
@@ -20,11 +27,12 @@ const ITEMS: Item[] = [
   { href: "/me/leave", label: "Leave", icon: CalendarOff },
   { href: "/me/attendance", label: "Time", icon: Clock3 },
   { href: "/me/pay", label: "Pay", icon: Wallet, needs: "pay" },
+  { href: "/me/documents", label: "Docs", icon: FileSignature },
   { href: "/me/profile", label: "Me", icon: UserRound },
 ];
 
 /**
- * The same five destinations, in two shapes: a thumb-reachable bar fixed to the
+ * The same destinations, in two shapes: a thumb-reachable bar fixed to the
  * bottom on a phone, and a row of pills in the header where there is room. Both
  * render from one list so the space can never offer different places to go
  * depending on the screen it is opened on.

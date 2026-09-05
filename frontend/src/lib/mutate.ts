@@ -5,41 +5,10 @@ import { revalidatePath, revalidateTag } from "next/cache";
 import { ApiError, apiFetch } from "@/lib/api-client";
 import { readForm, type FieldSpec, type FieldValues } from "@/lib/fields";
 import { REF_TAGS } from "@/lib/refs";
+import { FORM_IDLE, type FormState } from "@/lib/form-state";
 
-/**
- * The one shape every mutation returns, so `useActionState` looks the same on
- * every screen: a banner message, per-field messages, and a success flag the
- * dialog uses to close itself.
- */
-export type FormState<T = unknown> = {
-  ok?: boolean;
-  /** Banner message, for anything not attributable to a single field. */
-  error?: string;
-  fieldErrors?: Record<string, string>;
-  /** Confirmation to show once it succeeded. */
-  message?: string;
-  /** Id of the record that was written, so the caller can navigate to it. */
-  id?: string;
-  /**
-   * What the API returned. For a caller that needs more than "it worked" —
-   * whether an invite actually went out, say.
-   */
-  record?: T;
-  /**
-   * The write succeeded but something about it needs saying, and a toast will
-   * not do: it holds a value that exists nowhere else and has to be read,
-   * copied, and acted on before it is gone.
-   */
-  warning?: {
-    title: string;
-    body: string;
-    /** Shown in a copyable box. Never logged, never stored. */
-    secret?: string;
-    secretLabel?: string;
-  };
-};
+export { FORM_IDLE, type FormState };
 
-export const FORM_IDLE: FormState = {};
 
 export type ResourceConfig = {
   /** API collection path, e.g. "/employees". */
