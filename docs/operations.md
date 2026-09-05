@@ -4,7 +4,7 @@ Running the stack, configuring it, and what to check when something is wrong.
 
 ## The stack
 
-Three containers, defined in [`docker-compose.yml`](../docker-compose.yml).
+Defined in [`docker-compose.yml`](../docker-compose.yml).
 
 | Service | Image | Port | Depends on |
 |---|---|---|---|
@@ -12,20 +12,28 @@ Three containers, defined in [`docker-compose.yml`](../docker-compose.yml).
 | `api` | built from `api/Dockerfile` | `4000` | `db` healthy |
 | `web` | built from `frontend/Dockerfile` | `3000` | `api` healthy |
 
-Each waits on the one below being **healthy**, not merely started: `db` answers `pg_isready`, and
-`api` answers `GET /api/health`. The web container therefore never starts against an API still
-applying migrations.
+**The `web` service is currently commented out**, so `docker compose up -d` starts `db` and
+`api` only. That is deliberate while the client is being worked on: `npm run dev:web` on the
+host is a hot reload rather than a two-minute image rebuild for every change. Uncomment the
+block to run the full stack from images — nothing else needs changing, because the API does not
+depend on it.
+
+Each service waits on the one below being **healthy**, not merely started: `db` answers
+`pg_isready`, and `api` answers `GET /api/health`. The web container therefore never starts
+against an API still applying migrations.
 
 Postgres is published on **5433** so it cannot collide with another Postgres on the host. Inside
 the Compose network it is reached at `db:5432`.
 
 ```bash
-npm run docker:up      # build and start everything
+npm run docker:up      # build and start db + api (web is commented out)
 npm run docker:logs    # follow
 npm run docker:down    # stop
 ```
 
-`docker compose down -v` also drops the database volume, which is how you get a clean reseed.
+`docker compose down -v` drops **both** volumes — the database and the uploaded files — which is
+how you get a clean reseed. Note that it takes every uploaded document and signed copy with it;
+the seed does not recreate them, because they are made through the app.
 
 ## Environment
 
@@ -49,6 +57,12 @@ all. Copy `.env.example` to `.env` to change any of it.
 | `ACS_EMAIL_CONNECTION_STRING` | empty | Azure Communication Services. Setting it switches payslip delivery from the outbox to real sending. |
 | `ACS_SENDER_ADDRESS` | empty | Must be a **verified** sender on the ACS domain. Azure rejects any other username outright. |
 | `SMTP_*`, `MAIL_FROM` | empty | The older fallback, used only when there is no ACS connection string. |
+| `STORAGE_ROOT` | `/data/storage` in Compose, `./storage` on the host | Where uploaded documents, signed copies, avatars and the logo are written. Backed by the `peoplepay_files` volume. |
+| `AI_BRIDGE_URL` | empty | Empty **disables** the AI features cleanly rather than failing on a refused connection. |
+| `AI_BRIDGE_TOKEN` | empty | **Set it if the bridge is running.** Anything that can reach the port can spend money on your Claude account. |
+| `AI_TIMEOUT_MS` | `150000` | The bridge keeps its own, shorter timeout under this one. |
+| `AVATAR_API_URL` | DiceBear PNG endpoint | Where a starter profile picture is fetched from when an employee is created. Empty disables it. |
+| `AVATAR_SIZE` | `256` | Pixels. |
 
 ### AI features
 
@@ -167,7 +181,12 @@ Nothing here is production-hardened; this is what to change first.
 3. **`CORS_ORIGIN`** and **`NEXT_PUBLIC_API_URL`** — real hostnames. The second is build-time.
 4. **TLS** — terminate in front of both services. The session cookie sets `secure` when
    `NODE_ENV=production`, so it will not be sent over plain HTTP.
-5. **Backups** — the Postgres volume is the only durable state.
+5. **Backups** — there are **two** durable volumes, and both matter. `peoplepay_pgdata` holds
+   the database; `peoplepay_files` holds every uploaded document, signed copy, avatar and the
+   company logo. Backing up only the first leaves rows pointing at files that no longer exist.
+   They are separate volumes precisely so either can be moved or restored without the other.
+6. **Object storage** — local disk means one API instance. `StorageService` is the only class
+   that would have to change to put the bytes in S3 or Azure Blob.
 
 ## Troubleshooting
 

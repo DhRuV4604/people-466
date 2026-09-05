@@ -22,11 +22,15 @@ A screen should not invent primitives. It composes them, and it declares its dat
 | Path | Holds |
 |---|---|
 | `components/ui/` | The library. Import from `@/components/ui`. |
-| `components/data/` | Reading: `DataTable`, `FilterBar`, `StatusBadge`, `EmptyState`, `Section`, `StatTile`, `PersonCell`, skeletons. |
+| `components/data/` | Reading: `DataTable`, `FilterBar`, `StatusBadge`, `EmptyState`, `Section`, `StatTile`/`StatGrid`, `PersonCell`, skeletons. |
 | `components/form/` | Writing: `RecordDialog`, `RecordForm`, `RowActions`, `ActionButton`. |
-| `components/app/` | The shell: `AppSidebar`, `AppBreadcrumbs`. |
-| `lib/` | `api-client`, `session`, `access`, `fields`, `mutate`, `refs`, `format`, `status`. |
+| `components/app/` | The shell: `AppSidebar`, `AppBreadcrumbs`, `Notifications`. |
+| `components/documents/` | `DocumentDetail`, `SignPanel`, `SignaturePad`, `SubmitPanel` — shared by the HR and employee views of the same document. |
+| `components/employees/` | `AvatarPicker`. |
+| `lib/` | `api-client`, `session`, `access`, `fields`, `mutate`, `form-state`, `refs`, `format`, `status`, `avatar`, `paged`. |
 | `app/(app)/<domain>/` | One folder per screen. |
+| `app/(me)/me/` | The employee's own space: punch card, attendance, leave, pay, documents. |
+| `app/api/*/route.ts` | Proxies that attach the session cookie to a request the browser cannot authenticate itself — payslip PDFs, document files, avatars, the company logo, and the notification stream. |
 
 ## Adding a screen, end to end
 
@@ -162,6 +166,26 @@ never holds the full table and the Employee role's scoping is applied at the sou
 
 **Every destructive action confirms,** and the confirmation names the consequence — "Delete
 workspace", not "OK". `RowActions.remove` does this; `ActionButton` takes a `confirm` prop.
+
+**Import `FormState` and `FORM_IDLE` from `lib/form-state`, not `lib/mutate`.** `mutate.ts` is
+`server-only` and reaches `next/headers`, so a client component importing the idle value from it
+drags the whole server client into the browser bundle. The *type* is erased at compile time and
+would be harmless; `FORM_IDLE` is a real value, and that is what the split exists for.
+
+**A file the browser cannot authenticate goes through a proxy route.** The JWT is httpOnly, so
+neither an `<img src>` nor a plain link can carry it. `app/api/…/route.ts` reads the cookie
+server-side and streams the bytes back. Avatar URLs put the file id on the query string
+(`avatarUrl` in `lib/avatar.ts`) so a replaced picture is a new URL rather than a cached one.
+
+**`StatTile` is the same component on nine screens**, so it stays the same size on all of them —
+change it once and every screen moves together. `StatGrid` takes a `columns` count, `4` or `5`;
+five is for a row with one more thing worth saying than it has room for at four.
+
+**`suppressHydrationWarning` has to sit on the element holding the differing text**, not an
+ancestor of it. Put it on a wrapper and React still compares the text inside and reports the
+mismatch. This bites on anything rendered from the reader's own clock — a date drawn on the
+server in one timezone and rehydrated in another — where a re-render to reconcile is not worth
+the cost.
 
 ## How errors reach the user
 

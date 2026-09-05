@@ -6,7 +6,8 @@ end to end before an evaluation or viva.
 
 The other documents go deeper on individual areas — [architecture](architecture.md),
 [data-model](data-model.md), [api](api.md), [frontend](frontend.md),
-[operations](operations.md). This one is the overview that ties them together.
+[documents](documents.md), [operations](operations.md). This one is the overview
+that ties them together.
 
 ---
 
@@ -46,7 +47,10 @@ than typed in by hand.
 | **bcryptjs** | — | Password hashing (10 salt rounds). |
 | **class-validator / class-transformer** | — | Request body (DTO) validation. |
 | **Helmet** | 8 | Security HTTP headers. |
-| **PDFKit** | — | Generates payslip PDFs server-side. |
+| **PDFKit** | — | Builds payslip and letter PDFs from nothing. |
+| **pdf-lib** | — | Edits an existing PDF — appends the signature certificate page. |
+| **pdf-parse** | — | Extracts text from an uploaded PDF so a model can read it. |
+| **Multer** | — | `multipart/form-data` uploads, capped at 20 MB. |
 | **@nestjs/swagger** | 11 | Auto-generated OpenAPI docs at `/api/docs`. |
 | **Azure Communication Services** | — | Email delivery for payslips and invites. |
 | **Jest + Supertest** | — | Test tooling (configured; suite not yet written). |
@@ -152,9 +156,9 @@ So the API and the web client cannot drift apart. Three concrete cases:
 
 ### PostgreSQL 16, accessed through Prisma 6
 
-**20 application tables** and **15 enums**. Schema: `api/prisma/schema.prisma`.
+**22 application tables** and **17 enums**. Schema: `api/prisma/schema.prisma`.
 
-### The 20 tables
+### The 22 tables
 
 #### Access control (1)
 | # | Table | What it holds |
@@ -210,13 +214,21 @@ So the API and the web client cannot drift apart. Three concrete cases:
 | 17 | **EmailLog** | Every delivery attempt: recipient, subject, body, attachment name, status, error. The in-app outbox. |
 | 18 | **AuditLog** | Who did what: user (nullable + denormalised name/role), action, entity, entity id and label, a JSON field-level `changes` diff, a `snapshot` for deletes, HTTP method, path, IP. |
 | 19 | **Notification** | Per-recipient row: type, title, body, href, actor name, `readAt`. |
-| 20 | **AppSettings** | A single pinned row (`id = "singleton"`) for org-wide settings: `maxCheckInsPerDay`, `warnOnCheckOut`. |
+| 20 | **AppSettings** | A single pinned row (`id = "singleton"`) for org-wide settings: `maxCheckInsPerDay`, `warnOnCheckOut`, plus the company profile (name, address, contact, tax id, logo) used on payslips, letters and invites. |
 
-### The 15 enums
+#### Documents (2)
+See **[documents.md](documents.md)** for this feature in full.
+
+| # | Table | What it holds |
+|---|---|---|
+| 21 | **StoredFile** | Bytes on disk, described in a row: generated `key`, original `filename`, mime type, size, and a **SHA-256 `checksum`**. Referenced as a document original, a signed copy, an employee avatar or the company logo. |
+| 22 | **Document** | Something in one person's file — sent to them, asked of them, or signed. Carries the status timeline and, once signed, the evidence block: signer name, email, IP, user agent, the checksum as it stood, and the signature image. |
+
+### The 17 enums
 `EmployeeType`, `EmployeeStatus`, `ScheduleType`, `ContractStatus`, `ContractType`,
 `AttendanceStatus`, `LeaveUnit`, `AllocationStatus`, `LeaveRequestStatus`,
 `RuleCategory`, `ComputeType`, `PayrunStatus`, `PayslipStatus`, `EmailStatus`,
-`AuditAction`.
+`DocumentKind`, `DocumentStatus`, `AuditAction`.
 
 They are **native PostgreSQL enums** mirroring the const unions in
 `shared/src/enums.ts` one for one. The database rejects an invalid status outright.
@@ -300,9 +312,16 @@ signed it is valid until it expires. If an account is deactivated or its role is
 downgraded, a stale token would keep working for up to 7 days. Re-checking makes
 a change take effect **immediately**. The cost is one indexed primary-key lookup.
 
+The lookup also **catches its own failure and returns null**, so a token whose
+subject is not a well-formed id becomes a clean `401` rather than a Prisma
+`P2023` surfacing as a `400`. That is not hypothetical: sessions issued before
+the ids changed shape hit exactly this, and *what the client needs to hear is
+"sign in again"*. The web app sends them to `/signed-out`, which clears the
+cookies and returns them to the login screen.
+
 ### Authorisation — the RBAC matrix
 
-**5 roles × 13 modules × 5 actions**, defined once in `shared/src/rbac.ts`.
+**5 roles × 14 modules × 5 actions**, defined once in `shared/src/rbac.ts`.
 
 | Role | What it can reach |
 |---|---|
@@ -314,7 +333,7 @@ a change take effect **immediately**. The cost is one indexed primary-key lookup
 
 The modules are: `employees`, `contracts`, `workingSchedules`, `attendance`,
 `timeOffRequests`, `timeOffAllocations`, `timeOffTypes`, `payruns`, `payslips`,
-`salaryStructures`, `salaryRules`, `dashboard`, `auditLogs`.
+`salaryStructures`, `salaryRules`, `dashboard`, `documents`, `auditLogs`.
 The actions are: `read`, `create`, `update`, `delete`, `approve`.
 
 ### Q: Why is HR Manager written out per-module rather than as a seniority ladder?
@@ -610,8 +629,70 @@ row), and the HTTP method, path and IP from an `AsyncLocalStorage` request conte
   the process down with an unhandled write error.
 
 ### 7.11 Dashboard
-Aggregate counts and trends — headcount, attendance summary, pending leave
-requests, recent pay runs. Read-only, and only for roles with `dashboard` access.
+One endpoint, `GET /dashboard`, and three bands on the screen.
+
+**The task strip, at the top — what will spoil the next month.** Eight kinds:
+`PENDING_LEAVE`, `MISSING_BANK`, `NO_CONTRACT`, `NEVER_INVITED`,
+`AWAITING_SIGNATURE`, `DRAFT_PAYRUN`, `EXPIRING_CONTRACT`, `MISSING_CHECKOUT`.
+A card carries **what the work is**, not only how many: the item at the front of
+the queue by name, the rest as faces, and a hairline of its tone across the top.
+Cards with nothing in them are dropped rather than shown as zeros.
+
+Three finish **where they are noticed**: bank details are two fields and a save,
+leave is approve or refuse with the reason asked for in the same box, and an
+invite is one button. The rest link through, because *a button that only
+navigates is a button that lied*. They call the same endpoints the owning
+screens do, so a task finished here sends the same notification and leaves the
+same audit entry.
+
+**Five stat tiles** — net paid, cost to company, average salary, attendance
+health, and time off. The fifth exists because it is the one part of the month
+the other four say nothing about, and the only one with a decision still
+outstanding. `StatGrid` takes a `columns` count for this; four is the usual.
+
+**A twelve-month bar chart**, with the year's total, how many months actually
+ran, and the biggest. It replaced a twelve-row table of which eleven rows read
+zero on any install under a year old — *a table asks you to read every row to
+find the shape; bars are the shape*. Plain divs, not a charting library: one
+series of twelve values does not justify a hundred kilobytes to draw a dozen
+rectangles.
+
+Only for roles with `dashboard` access.
+
+### Q: Which month does a payslip belong to?
+**The month its period ends in.** This is worth being able to explain, because
+the obvious alternatives are both wrong.
+
+Payroll periods straddle month boundaries as a matter of course — a run from 31
+July to 31 August is ordinary. Requiring a period to sit *entirely inside* the
+month (`periodStart >= start AND periodEnd <= end`) excludes exactly those runs,
+which is why the dashboard used to open on "the latest month with payroll" and
+then report that month as having none: ₹0 net paid, every department bar empty.
+
+Testing *overlap* instead is the other extreme: a run touching July and a run
+touching August both count for July, so July shows twice its own payroll.
+
+So the filter is on the end date alone — `periodEnd BETWEEN start AND end` —
+which is also what a pay run is named for. The same rule picks the opening
+month, buckets the trend and filters pay runs, so all three agree.
+
+### 7.12 Documents & e-signature
+Each employee's file: documents sent to them, requested from them, and signed by
+them. Uploads are validated by **magic bytes**, not just their declared type, and
+stored under a **generated** key so a filename can never become a path.
+
+Signing appends a **certificate page** carrying the signer, timestamp, IP, device
+and a **SHA-256 fingerprint** of the file as it was sent — the original pages are
+left untouched, so what was agreed to can always be produced.
+
+Letters can be **drafted by a model** through a small bridge that runs the Claude
+CLI on the host; everything it writes is filed as a `DRAFT` for a person to read
+first.
+
+**This feature has its own document: [documents.md](documents.md).** It covers the
+storage model, both lifecycles, the certificate, the AI bridge and its prompt-injection
+handling, and the permission subtlety that lets an employee sign without holding a
+`create` grant.
 
 ---
 
@@ -642,7 +723,7 @@ requests, recent pay runs. Read-only, and only for roles with `dashboard` access
 
 | Path | Purpose |
 |---|---|
-| `prisma/schema.prisma` | The data model — 20 models, 15 enums. |
+| `prisma/schema.prisma` | The data model — 22 models, 17 enums. |
 | `prisma/migrations/` | Versioned SQL migrations. |
 | `prisma/seed.ts` | Seed script. |
 | `src/main.ts` | Bootstrap: global `/api` prefix, Helmet, CORS, `ValidationPipe`, Swagger at `/api/docs`. |
@@ -668,8 +749,11 @@ requests, recent pay runs. Read-only, and only for roles with `dashboard` access
 | `attendance/` | CRUD, `computeAttendance`, the punch card, period summaries, `getWorkedTimeInPeriod` (consumed by payroll). |
 | `time-off/` | Types, allocations, requests, approve/refuse/cancel, `getBalances`, `approvedLeaveDaysInPeriod` (consumed by payroll). The largest service at ~870 lines. |
 | `payroll/` | `payroll-engine.service.ts` (the rule evaluator), `payslips.service.ts` (`computeFor` gathers the context), `payruns.service.ts` (lifecycle + warnings), `salary-config.service.ts` (structures and rules), `pdf.service.ts`, `mail.service.ts`. |
-| `config/` | Working schedules, departments, job positions, and the `AppSettings` singleton. |
-| `dashboard/` | Aggregate statistics. |
+| `documents/` | `documents.service.ts` (both lifecycles, scoping, sign/submit/decline), `letter-pdf.service.ts` (renders generated text onto the letterhead). See **[documents.md](documents.md)**. |
+| `files/` | `storage.service.ts` (validation, generated keys, path-traversal guard, checksums), `signing.service.ts` (appends the certificate page). |
+| `ai/` | `ai.service.ts` — an HTTP client for `ai-bridge/`, and the source of the "not set up" vs "not answering" distinction. |
+| `config/` | Working schedules, departments, job positions, the `AppSettings` singleton, and the company profile + logo (`company.service.ts`). |
+| `dashboard/` | One aggregate for the whole overview — KPIs, the twelve-month trend, and the eight task kinds. Counts are queried apart from the samples they summarise, so a capped sample never understates the number. |
 | `notifications/` | List, mark read, and the SSE stream. |
 | `audit/` | `audit.extension.ts` (the Prisma hook), `audit.diff.ts` (field diffing), `audit.entities.ts` (which models are audited), `audit-context.ts` (`AsyncLocalStorage` request context), `audit.interceptor.ts`, and the read-only controller. |
 
@@ -679,11 +763,15 @@ requests, recent pay runs. Read-only, and only for roles with `dashboard` access
 
 | Route group | Contents |
 |---|---|
-| `(app)/` | **The admin/HR shell** — sidebar, breadcrumbs, notification bell, theme toggle. Its `layout.tsx` is also the gate: no session → `/login`; `mustChangePassword` → `/change-password`. Contains `page.tsx` (overview), `employees/`, `contracts/`, `attendance/`, `time-off/`, `payruns/`, `payslips/`, `salary/`, `settings/`, `audit/`, `profile/`. |
-| `(me)/me/` | **The self-service space** for the Employee role — punch card, own attendance, own leave, own payslips, own profile. Separate because every list in the admin panel would hold exactly one line for them. |
+| `(app)/` | **The admin/HR shell** — sidebar, breadcrumbs, notification bell, theme toggle. Its `layout.tsx` is also the gate: no session → `/login`; `mustChangePassword` → `/change-password`. Contains `page.tsx` (overview), `employees/`, `contracts/`, `attendance/`, `time-off/`, `payruns/`, `payslips/`, `salary/`, `documents/`, `settings/`, `audit/`, `profile/`. |
+| `(me)/me/` | **The self-service space** for the Employee role — punch card, own attendance, own leave, own payslips, own documents (sign and submit here), own profile. Separate because every list in the admin panel would hold exactly one line for them. `landingFor()` sends them straight here. |
 | `login/`, `change-password/` | Unauthenticated routes. |
-| `api/payslips/[id]/pdf/route.ts` | The PDF proxy that attaches the cookie. |
+| `api/payslips/[id]/pdf/route.ts` | The payslip PDF proxy that attaches the cookie. |
+| `api/documents/[id]/file/route.ts` | Document files, `?version=signed` (default) or `original`. |
+| `api/employees/[id]/avatar/route.ts` | Profile pictures. The file id rides on the query string so a replaced picture is a new URL. |
+| `api/company/logo/route.ts` | The company logo. |
 | `api/notifications/stream/route.ts` | The SSE proxy that attaches the cookie. |
+| `signed-out/route.ts` | Where a dead or rejected token lands. |
 | `styleguide/` | A live component gallery. |
 
 **The per-route file convention** — the pattern repeated on every screen:
@@ -693,7 +781,7 @@ requests, recent pay runs. Read-only, and only for roles with `dashboard` access
 | `page.tsx` | A **Server Component**. Fetches data and renders. |
 | `fields.ts` | The `FieldSpec[]` describing this resource's form fields. |
 | `actions.ts` | **Server Actions** — the create/update/delete mutations. |
-| `_components/` | Client components local to that route. |
+| `_components/` | Client components local to that route. The overview's are `overview-body.tsx`, `task-strip.tsx` (the eight task cards) and `trend-chart.tsx` (twelve months as bars, built from divs). |
 | `loading.tsx` | Skeleton shown while the server component streams. |
 | `error.tsx`, `not-found.tsx` | Error boundaries. |
 
@@ -706,6 +794,8 @@ requests, recent pay runs. Read-only, and only for roles with `dashboard` access
 | `data/` | List rendering — `data-table.tsx`, `filter-bar.tsx`, `pagination.tsx`, `status-badge.tsx`, `skeletons.tsx`. |
 | `form/` | The write spine — `record-form.tsx`, `record-dialog.tsx`, `row-actions.tsx`, `action-button.tsx`, `warning-dialog.tsx`. |
 | `app/` | The shell — `app-sidebar.tsx` (built from the RBAC matrix), `app-breadcrumbs.tsx`, `notification-bell.tsx`. |
+| `documents/` | `document-detail.tsx`, `sign-panel.tsx`, `signature-pad.tsx` (draw or type, both producing a PNG data URL), `submit-panel.tsx`. Shared by the HR and employee views. |
+| `employees/` | `avatar-picker.tsx`. |
 | `auth/` | `login-form.tsx`, `auth-shell.tsx`. |
 
 #### `lib/`
@@ -717,6 +807,8 @@ requests, recent pay runs. Read-only, and only for roles with `dashboard` access
 | `access.ts` | Route guards and `landingFor(user)` — **each role lands on the first screen it can actually open**. |
 | `fields.ts` | The `FieldSpec` type and `readForm()`. **One spec drives both sides**: the client renders the control, the server action reads the value back out. Adding a column is one line, not an edit in three files. |
 | `mutate.ts` | The mutation helper. Every action returns one `FormState` shape — `{ ok, error, fieldErrors, message, id, record, warning }` — so `useActionState` looks identical on every screen. Also maps a write to the cache tags it must invalidate. |
+| `form-state.ts` | `FormState` and `FORM_IDLE`, split out of `mutate.ts` because that file is `server-only` — a client component importing the idle value from it would drag the server client into the browser bundle. |
+| `avatar.ts` | `avatarUrl()` — puts the file id on the query string so a replaced picture is a new URL rather than a cached one. |
 | `paged.ts`, `refs.ts`, `format.ts`, `status.ts`, `utils.ts` | Pagination helpers, cached reference lists, formatters, status→colour mapping, `cn()`. |
 
 ### Q: Why are there two route groups, `(app)` and `(me)`?
@@ -783,8 +875,18 @@ Stated plainly, because it is better to name it than be caught by it:
 - **The web container is commented out** in `docker-compose.yml`, deliberately —
   `npm run dev:web` on the host is a hot reload instead of a two-minute image
   rebuild per change. Uncommenting the block restores the full stack.
-- Roadmap: approval chains with delegation, payroll journal export, document
-  storage, multi-currency and multi-company, statutory reports.
+- **On documents specifically:** no virus scanning (type and magic bytes are
+  checked, content is not), no OCR so a scanned PDF cannot be read by the model,
+  no bulk send, no expiry or reminders on a document left unsigned, and no
+  versioning — superseding means cancelling and filing a new one.
+- **File storage is local disk**, so only one API instance can run.
+  `StorageService` is the only class that would change to move to S3 or Azure
+  Blob.
+- **The AI bridge is optional and manual.** It runs on the host, is not
+  supervised, and has to be started by hand; with `AI_BRIDGE_URL` empty the
+  features report that they are not set up.
+- Roadmap: approval chains with delegation, payroll journal export,
+  multi-currency and multi-company, statutory reports.
 
 ---
 
@@ -796,14 +898,18 @@ Stated plainly, because it is better to name it than be caught by it:
 | Frontend framework | **Next.js 16**, App Router, React 19 |
 | Database | **PostgreSQL 16** |
 | ORM | **Prisma 6** |
-| Number of tables | **20** (+ Prisma's own `_prisma_migrations`) |
-| Number of enums | **15** |
+| Number of tables | **22** (+ Prisma's own `_prisma_migrations`) |
+| Number of migrations | **3** — `init`, `documents_and_files`, `company_details` |
+| Number of enums | **17** |
 | Styling | **Tailwind CSS 4** |
 | UI components | **Radix UI** primitives + **Animate UI**, animated with **Motion** |
 | Authentication | **JWT** (7-day) in an **httpOnly cookie**, `bcrypt` password hashing |
-| Authorisation | **RBAC matrix** — 5 roles × 13 modules × 5 actions, defined once in `shared/` |
+| Authorisation | **RBAC matrix** — 5 roles × 14 modules × 5 actions, defined once in `shared/` |
 | API style | **REST**, all routes under `/api`, documented by **Swagger** at `/api/docs` |
-| PDF generation | **PDFKit** |
+| PDF generation | **PDFKit** (build from scratch) + **pdf-lib** (append to an existing file) |
+| File storage | Local disk on a Docker volume, described by a `StoredFile` row |
+| E-signature | Drawn or typed mark, with an appended certificate page carrying a SHA-256 fingerprint |
+| AI | Claude via `ai-bridge/`, a host process wrapping the CLI. Optional — empty `AI_BRIDGE_URL` disables it |
 | Email | **Azure Communication Services**, SMTP fallback, in-app outbox otherwise |
 | Live updates | **Server-Sent Events** for notifications |
 | Repository layout | **npm workspaces** monorepo — `api`, `frontend`, `shared` |
@@ -853,5 +959,10 @@ lifecycle at once.
    Show a blocking warning (missing bank details) preventing validation.
 5. **Download the PDF**, then **send the payslips** and show the outbox in
    Email logs.
-6. **Sign in as Admin** → the Audit trail, showing the field-level diff of a
+6. **Documents** → send that employee something to sign. Sign in as them, draw a
+   signature, and open the signed PDF: the certificate page carries the
+   timestamp, the IP and a SHA-256 fingerprint, and the original pages are
+   untouched. If the AI bridge is running, draft the letter with it first and
+   point out it arrives as a **draft** for a person to read.
+7. **Sign in as Admin** → the Audit trail, showing the field-level diff of a
    change made earlier in the demo.
