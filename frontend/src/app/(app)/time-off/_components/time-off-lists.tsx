@@ -49,6 +49,7 @@ export function RequestList({
   canDelete,
   canApprove,
   viewerEmployeeId,
+  hideEmployee = false,
 }: {
   rows: LeaveRequestDto[];
   fields: FieldSpec[];
@@ -57,23 +58,32 @@ export function RequestList({
   canApprove: boolean;
   /** The viewer's own employee record, when they have one. */
   viewerEmployeeId: string | null;
+  /**
+   * Drops the employee column. Set on a list already about one person, where
+   * repeating their name down every row says nothing.
+   */
+  hideEmployee?: boolean;
 }) {
   return (
     <DataTable
       rows={rows}
       getKey={(row) => row.id}
       columns={[
-        {
-          header: "Employee",
-          className: "min-w-[180px]",
-          cell: (row) => (
-            <PersonCell
-              name={row.employee?.fullName ?? "Unknown"}
-              meta={row.employee?.department}
-              href={`/employees/${row.employeeId}`}
-            />
-          ),
-        },
+        ...(hideEmployee
+          ? []
+          : [
+              {
+                header: "Employee",
+                className: "min-w-[180px]",
+                cell: (row: LeaveRequestDto) => (
+                  <PersonCell
+                    name={row.employee?.fullName ?? "Unknown"}
+                    meta={row.employee?.department}
+                    href={`/employees/${row.employeeId}`}
+                  />
+                ),
+              },
+            ]),
         { header: "Type", cell: (row) => <TypeCell type={row.type} /> },
         {
           header: "Dates",
@@ -205,29 +215,36 @@ export function AllocationList({
   canEdit,
   canDelete,
   canApprove,
+  hideEmployee = false,
 }: {
   rows: LeaveAllocationDto[];
   fields: FieldSpec[];
   canEdit: boolean;
   canDelete: boolean;
   canApprove: boolean;
+  /** See `RequestList`. */
+  hideEmployee?: boolean;
 }) {
   return (
     <DataTable
       rows={rows}
       getKey={(row) => row.id}
       columns={[
-        {
-          header: "Employee",
-          className: "min-w-[180px]",
-          cell: (row) => (
-            <PersonCell
-              name={row.employee?.fullName ?? "Unknown"}
-              meta={row.employee?.department}
-              href={`/employees/${row.employeeId}`}
-            />
-          ),
-        },
+        ...(hideEmployee
+          ? []
+          : [
+              {
+                header: "Employee",
+                className: "min-w-[180px]",
+                cell: (row: LeaveAllocationDto) => (
+                  <PersonCell
+                    name={row.employee?.fullName ?? "Unknown"}
+                    meta={row.employee?.department}
+                    href={`/employees/${row.employeeId}`}
+                  />
+                ),
+              },
+            ]),
         { header: "Type", cell: (row) => <TypeCell type={row.type} /> },
         {
           header: "Valid",

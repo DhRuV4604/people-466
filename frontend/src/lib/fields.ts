@@ -194,3 +194,14 @@ export function readForm(
     fieldErrors: Object.keys(fieldErrors).length > 0 ? fieldErrors : undefined,
   };
 }
+
+/**
+ * The same field list with one field dropped.
+ *
+ * A page that already fixes a value — the employee on their own record page —
+ * binds it into the server action and takes the control off the form, so no
+ * form offers a choice the page has already made.
+ */
+export function withoutField(fields: FieldSpec[], name: string): FieldSpec[] {
+  return fields.filter((field) => field.name !== name);
+}
