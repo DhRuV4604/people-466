@@ -52,6 +52,7 @@ export {
 } from "./card";
 export { BackLink, PageHeader, type PageHeaderProps } from "./page-header";
 export { Badge, badgeVariants } from "./badge";
+export { BrandMark } from "./brand-mark";
 export { Calendar } from "./calendar";
 export {
   ProfileCard,

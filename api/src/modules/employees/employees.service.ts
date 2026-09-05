@@ -1,9 +1,11 @@
 import {
   Injectable,
+  Logger,
   NotFoundException,
   BadRequestException,
   ForbiddenException,
 } from '@nestjs/common';
+import { randomUUID } from 'node:crypto';
 import { Prisma } from '@prisma/client';
 import { can, scopeToOwnRecords } from '@peoplepay360/shared';
 import type {
@@ -41,6 +43,8 @@ const AVATAR_TYPES = new Set(['image/png', 'image/jpeg', 'image/webp']);
 
 @Injectable()
 export class EmployeesService {
+  private readonly logger = new Logger(EmployeesService.name);
+
   constructor(
     private readonly prisma: PrismaService,
     private readonly notifications: NotificationsService,
@@ -295,6 +299,8 @@ export class EmployeesService {
       }
     }
 
+    await this.giveStarterAvatar(created.id, user.userId);
+
     // Every role that can read an employee is told, except the Employee role:
     // it only ever sees itself, so a new colleague is not its news.
     await this.notifications.notifyPermission(
@@ -392,6 +398,48 @@ export class EmployeesService {
    * and on an install with no mail configured, until someone else intervenes.
    * Changing your own password is what `/auth/change-password` is for.
    */
+  /**
+   * Gives a new employee a starter picture.
+   *
+   * Seeded with a random id rather than their name or email: the request goes
+   * to a third party, and there is no reason for it to carry anything about
+   * the person. The seed is not stored either — this runs once, and the
+   * picture that comes back is the artefact.
+   *
+   * Failure is swallowed. An employee whose account exists but whose avatar
+   * did not download is a smaller problem than a create that half happened,
+   * and the fallback is the initials they would have had anyway.
+   */
+  private async giveStarterAvatar(employeeId: string, userId: string): Promise<void> {
+    const base = this.config.get<string>('avatar.apiUrl')?.trim();
+    if (!base) return;
+
+    const size = this.config.get<number>('avatar.size') ?? 256;
+    const url = `${base}?seed=${randomUUID()}&size=${size}`;
+
+    try {
+      const response = await fetch(url, { signal: AbortSignal.timeout(8000) });
+      if (!response.ok) throw new Error(`upstream said ${response.status}`);
+
+      const buffer = Buffer.from(await response.arrayBuffer());
+      const stored = await this.storage.saveGenerated(
+        buffer,
+        'avatar.png',
+        'image/png',
+        userId,
+        'avatars'
+      );
+      await this.prisma.employee.update({
+        where: { id: employeeId },
+        data: { avatarId: stored.id },
+      });
+    } catch (error) {
+      this.logger.warn(
+        `Could not fetch a starter avatar: ${error instanceof Error ? error.message : 'unknown'}`
+      );
+    }
+  }
+
   /**
    * Sets a profile picture.
    *

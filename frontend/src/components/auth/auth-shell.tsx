@@ -6,8 +6,7 @@ import Link from "next/link";
 import { AuroraHero } from "@/components/ui";
 import { Fade } from "@/components/animate-ui/primitives/effects/fade";
 import { Slide } from "@/components/animate-ui/primitives/effects/slide";
-import { AnimateIcon } from "@/components/animate-ui/icons/icon";
-import { Users } from "@/components/animate-ui/icons/users";
+import { BrandMark } from "@/components/ui/brand-mark";
 
 /**
  * Full-bleed split layout pinned to the viewport: the page itself never
@@ -20,17 +19,13 @@ export function AuthShell({ children }: { children: React.ReactNode }) {
       <div className="flex w-full flex-col overflow-hidden px-5 py-6 sm:px-10 sm:py-8 lg:w-1/2 lg:px-14 xl:px-20">
         <header>
           <Slide direction="down" offset={14} delay={60}>
-            <AnimateIcon animateOnHover asChild>
-              <Link
-                href="/"
-                className="inline-flex items-center gap-2.5 rounded-lg font-semibold outline-none focus-visible:ring-[3px] focus-visible:ring-ring"
-              >
-                <span className="flex size-9 items-center justify-center rounded-xl bg-primary text-primary-foreground">
-                  <Users size={19} />
-                </span>
-                <span className="text-lg tracking-tight">People</span>
-              </Link>
-            </AnimateIcon>
+            <Link
+              href="/"
+              className="inline-flex items-center gap-2.5 rounded-lg font-semibold outline-none focus-visible:ring-[3px] focus-visible:ring-ring"
+            >
+              <BrandMark size={36} />
+              <span className="text-lg tracking-tight">People</span>
+            </Link>
           </Slide>
         </header>
 

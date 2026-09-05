@@ -14,6 +14,11 @@ export interface AppConfig {
     /** Where uploaded files are written. A mounted volume in Compose. */
     root: string;
   };
+  avatar: {
+    /** Where a starter profile picture is fetched from. Empty disables it. */
+    apiUrl: string;
+    size: number;
+  };
   ai: {
     /** The bridge that runs the Claude CLI on the host. Empty disables AI. */
     bridgeUrl: string;
@@ -60,6 +65,17 @@ export default (): AppConfig => {
       .filter(Boolean),
     storage: {
       root: process.env.STORAGE_ROOT ?? './storage',
+    },
+    avatar: {
+      /**
+       * DiceBear, asked for a PNG rather than the SVG it also offers: the
+       * storage layer accepts raster images and checks their first bytes, and
+       * an SVG from anywhere is a document that can carry script.
+       *
+       * Empty disables it, and a new employee simply starts with initials.
+       */
+      apiUrl: process.env.AVATAR_API_URL ?? 'https://api.dicebear.com/10.x/critters/png',
+      size: Number(process.env.AVATAR_SIZE ?? 256),
     },
     ai: {
       /**

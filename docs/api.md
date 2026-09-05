@@ -135,6 +135,12 @@ migration created for employees that predated it. It returns `{ delivered, error
 oneTimePassword? }` rather than throwing, on the same terms as create: a send that fails still
 leaves a usable account, a row saying why, and the password in the response.
 
+A new employee is given a starter picture from DiceBear, fetched as a PNG so
+the storage layer's type check applies unchanged. It is seeded with a random
+id, never their name or email: the request goes to a third party and has no
+reason to carry anything about the person. Failure is swallowed — the fallback
+is the initials they would have had anyway. `AVATAR_API_URL=""` turns it off.
+
 A profile picture is read with `employees:read`, which the Employee role holds
 for itself alone, so a person sees their own and HR sees everyone's. Setting
 one is guarded on the record rather than the matrix: anyone may set their own,

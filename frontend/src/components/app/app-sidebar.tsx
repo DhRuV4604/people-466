@@ -3,6 +3,7 @@
 import * as React from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
+import { BrandMark } from "@/components/ui/brand-mark";
 import {
   CalendarClock,
   CalendarOff,
@@ -50,7 +51,6 @@ import {
   SidebarSeparator,
   UserAvatar,
 } from "@/components/ui";
-import { Users } from "@/components/animate-ui/icons/users";
 import { logoutAction } from "@/app/(app)/actions";
 
 type NavItem = {
@@ -188,9 +188,7 @@ export function AppSidebar({
           <SidebarMenuItem>
             <SidebarMenuButton asChild size="lg" tooltip="PeoplePay360">
               <Link href={home}>
-                <span className="flex aspect-square size-8 shrink-0 items-center justify-center rounded-lg bg-primary text-primary-foreground">
-                  <Users size={17} />
-                </span>
+                <BrandMark size={32} />
                 <span className="grid flex-1 text-left leading-tight">
                   <span className="truncate font-semibold">PeoplePay360</span>
                   <span className="truncate text-xs text-muted-foreground">
