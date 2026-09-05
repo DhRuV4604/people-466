@@ -1,4 +1,5 @@
 import { Injectable, NotFoundException, Logger } from '@nestjs/common';
+import { EmailClient } from '@azure/communication-email';
 import { ConfigService } from '@nestjs/config';
 import type { EmailLogDto } from '@peoplepay360/shared';
 import { PrismaService } from '../../prisma/prisma.service';
@@ -14,16 +15,25 @@ function formatDate(date: Date): string {
   return date.toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' });
 }
 
+/** How a message actually leaves, decided by what is configured. */
+type Transport = 'acs' | 'smtp' | 'outbox';
+
 /**
  * Payslip delivery.
  *
- * With no SMTP host configured the message is recorded in the in-app outbox
- * instead of dialling out, so the bulk-send flow is demonstrable without
- * credentials. Setting SMTP_HOST switches to real sending.
+ * Three ways out, picked by configuration rather than a flag: Azure
+ * Communication Services when it has a connection string, SMTP when it has a
+ * host, and otherwise nothing — the attempt is recorded in the in-app outbox
+ * so the bulk-send flow is demonstrable without credentials.
+ *
+ * Whichever is used, the payslip PDF is attached. Recording a delivery without
+ * one would tell the payroll team a payslip had gone out when it had not.
  */
 @Injectable()
 export class MailService {
   private readonly logger = new Logger(MailService.name);
+  /** Built on first use and reused: each client opens its own connection. */
+  private acs?: EmailClient;
 
   constructor(
     private readonly prisma: PrismaService,
@@ -31,8 +41,19 @@ export class MailService {
     private readonly config: ConfigService
   ) {}
 
-  isSmtpConfigured(): boolean {
-    return Boolean(this.config.get<string>('mail.host')?.trim());
+  /**
+   * ACS wins where both are set: it is the deliberate choice, SMTP the older
+   * fallback.
+   */
+  private transport(): Transport {
+    if (this.config.get<string>('mail.acsConnectionString')?.trim()) return 'acs';
+    if (this.config.get<string>('mail.host')?.trim()) return 'smtp';
+    return 'outbox';
+  }
+
+  /** Whether a send would actually leave the building. */
+  isDeliveryConfigured(): boolean {
+    return this.transport() !== 'outbox';
   }
 
   private buildBody(params: {
@@ -81,12 +102,16 @@ export class MailService {
       try {
         if (!employee.workEmail) throw new Error('Employee has no work email address.');
 
-        // Generating the PDF proves the attachment is producible before we
-        // record the message as delivered.
-        const { filename } = await this.pdf.generatePayslip(payslip.id);
+        // Generated before sending, so a payslip that cannot be rendered fails
+        // here rather than arriving as an email with nothing attached.
+        const { buffer, filename } = await this.pdf.generatePayslip(payslip.id);
+        const attachment = { filename, content: buffer };
 
-        if (this.isSmtpConfigured()) {
-          await this.sendViaSmtp({ to: employee.workEmail, subject, body });
+        const transport = this.transport();
+        if (transport === 'acs') {
+          await this.sendViaAcs({ to: employee.workEmail, name: employeeName, subject, body, attachment });
+        } else if (transport === 'smtp') {
+          await this.sendViaSmtp({ to: employee.workEmail, subject, body, attachment });
         }
 
         await this.prisma.emailLog.create({
@@ -157,6 +182,7 @@ export class MailService {
     to: string;
     subject: string;
     body: string;
+    attachment: { filename: string; content: Buffer };
   }): Promise<void> {
     const nodemailer = await import('nodemailer' as string).catch(() => null);
     if (!nodemailer) {
@@ -179,6 +205,56 @@ export class MailService {
       to: params.to,
       subject: params.subject,
       text: params.body,
+      attachments: [
+        { filename: params.attachment.filename, content: params.attachment.content },
+      ],
     });
+  }
+
+  /**
+   * Azure Communication Services.
+   *
+   * `beginSend` returns a poller: the promise resolving only means Azure
+   * accepted the message. Waiting for the operation to finish is what turns a
+   * rejected sender address or a bad recipient into a failure this method can
+   * report, rather than a silent non-delivery recorded as SENT.
+   */
+  private async sendViaAcs(params: {
+    to: string;
+    name: string;
+    subject: string;
+    body: string;
+    attachment: { filename: string; content: Buffer };
+  }): Promise<void> {
+    const senderAddress = this.config.get<string>('mail.acsSenderAddress')?.trim();
+    if (!senderAddress) {
+      throw new Error(
+        'ACS_EMAIL_CONNECTION_STRING is set but ACS_SENDER_ADDRESS is not. It must be a verified sender on the ACS domain.'
+      );
+    }
+
+    this.acs ??= new EmailClient(
+      this.config.get<string>('mail.acsConnectionString') as string
+    );
+
+    const poller = await this.acs.beginSend({
+      senderAddress,
+      content: { subject: params.subject, plainText: params.body },
+      recipients: { to: [{ address: params.to, displayName: params.name }] },
+      attachments: [
+        {
+          name: params.attachment.filename,
+          contentType: 'application/pdf',
+          contentInBase64: params.attachment.content.toString('base64'),
+        },
+      ],
+    });
+
+    const result = await poller.pollUntilDone();
+    if (result.status !== 'Succeeded') {
+      throw new Error(
+        `Azure reported the message as ${result.status}${result.error?.message ? `: ${result.error.message}` : ''}`
+      );
+    }
   }
 }
