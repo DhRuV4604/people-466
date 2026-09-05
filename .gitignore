@@ -25,3 +25,10 @@ next-env.d.ts
 
 # Tool-specific agent pointer, regenerated locally.
 frontend/CLAUDE.md
+
+# pdf.js assets copied out of node_modules at install time; see
+# frontend/src/components/documents/pdf-viewer.tsx for why they are served
+# locally rather than from a CDN.
+frontend/public/pdf.worker.min.mjs
+frontend/public/pdf-cmaps/
+frontend/public/pdf-fonts/

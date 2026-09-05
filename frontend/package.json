@@ -7,7 +7,8 @@
     "build": "next build",
     "start": "next start",
     "lint": "node scripts/lint.mjs",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "postinstall": "node -e \"const{cpSync,mkdirSync}=require('fs');const r=require.resolve('pdfjs-dist/package.json').replace(/package\\.json$/,'');mkdirSync('public/pdf-cmaps',{recursive:true});mkdirSync('public/pdf-fonts',{recursive:true});cpSync(r+'build/pdf.worker.min.mjs','public/pdf.worker.min.mjs');cpSync(r+'cmaps','public/pdf-cmaps',{recursive:true});cpSync(r+'standard_fonts','public/pdf-fonts',{recursive:true});\""
   },
   "dependencies": {
     "@floating-ui/react": "^0.27.20",
@@ -24,6 +25,7 @@
     "react": "19.2.8",
     "react-day-picker": "^10.0.1",
     "react-dom": "19.2.8",
+    "react-pdf": "^10.5.0",
     "react-use-measure": "^2.1.7",
     "server-only": "^0.0.1",
     "shadcn": "^4.21.0",

@@ -12,6 +12,7 @@ import { Badge } from "@/components/ui";
 import { buttonVariants } from "@/components/ui/button-variants";
 import { SignPanel } from "@/components/documents/sign-panel";
 import { SubmitRequestedPanel } from "@/components/documents/submit-panel";
+import { PdfViewer } from "@/components/documents/pdf-viewer";
 import {
   DOCUMENT_KIND_LABELS,
   DOCUMENT_STATUS_LABELS,
@@ -33,7 +34,9 @@ function Fact({
   return (
     <div className="flex flex-col gap-0.5">
       <dt className="text-xs text-muted-foreground">{label}</dt>
-      <dd className={mono ? "font-mono text-xs break-all" : "text-sm break-words"}>
+      <dd className={mono
+            ? "font-mono text-[11px] leading-relaxed break-all text-muted-foreground"
+            : "text-sm break-words"}>
         {value}
       </dd>
     </div>
@@ -85,19 +88,20 @@ export function DocumentDetail({
         </p>
       ) : null}
 
-      <div className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_360px]">
+      <div className="grid gap-5 lg:grid-cols-[minmax(0,1fr)_300px]">
         <div className="flex min-w-0 flex-col gap-4">
           {hasFile ? (
             <>
-              {/* An iframe rather than a PDF library: the browser already has
-                  a viewer, and shipping a second one to render what it can
-                  already show is a megabyte for nothing. */}
-              <iframe
-                src={`/api/documents/${document.id}/file${
+              {/* pdf.js rather than an iframe. The browser's own viewer works,
+                  but it arrives with its own dark toolbar, its own icons and a
+                  sidebar, and looks like another program pasted into the page —
+                  and looks different in every browser, so nobody can be shown
+                  the same thing twice. */}
+              <PdfViewer
+                url={`/api/documents/${document.id}/file${
                   document.signedFile ? "" : "?version=original"
                 }`}
                 title={document.title}
-                className="h-[70vh] min-h-96 w-full rounded-xl border border-border bg-muted/20"
               />
 
               <div className="flex flex-wrap items-center gap-2">
@@ -149,14 +153,14 @@ export function DocumentDetail({
           ) : null}
 
           {signature ? (
-            <div className="rounded-2xl border border-border bg-card p-5">
+            <div className="rounded-2xl border border-border bg-card p-4">
               <div className="mb-4 flex items-center gap-2">
                 <span className="flex size-8 items-center justify-center rounded-lg bg-primary/10 text-primary">
                   <ShieldCheck className="size-4" />
                 </span>
                 <h2 className="text-sm font-semibold">Signature</h2>
               </div>
-              <dl className="flex flex-col gap-3">
+              <dl className="flex flex-col gap-2.5">
                 <Fact label="Signed by" value={signature.signerName ?? "—"} />
                 <Fact label="Email" value={signature.signerEmail ?? "—"} />
                 <Fact
@@ -195,9 +199,9 @@ export function DocumentDetail({
             </div>
           ) : null}
 
-          <div className="rounded-2xl border border-border bg-card p-5">
+          <div className="rounded-2xl border border-border bg-card p-4">
             <h2 className="mb-4 text-sm font-semibold">History</h2>
-            <dl className="flex flex-col gap-3">
+            <dl className="flex flex-col gap-2.5">
               <Fact
                 label="Added by"
                 value={`${document.createdBy.name} · ${formatDateTime(document.createdAt)}`}
