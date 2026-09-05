@@ -105,7 +105,6 @@ export default async function NewPayrunPage({
     return (
       <>
         <PageHeader
-          above={<BackLink href="/payruns">All pay runs</BackLink>}
           title="New pay run"
           description="Step 1 of 2. The period and the structure decide who can be paid, so they come first."
         />

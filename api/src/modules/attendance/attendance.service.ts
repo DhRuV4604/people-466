@@ -13,6 +13,7 @@ import {
   type AttendanceSummaryDto,
 } from '@peoplepay360/shared';
 import { PrismaService } from '../../prisma/prisma.service';
+import { AppSettingsService } from '../config/app-settings.service';
 import { toNumber, toDecimal, round2 } from '../../common/decimal';
 import type { AuthenticatedUser } from '../auth/auth.types';
 import {
@@ -41,7 +42,46 @@ export interface AttendanceComputation {
 
 @Injectable()
 export class AttendanceService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly settings: AppSettingsService,
+  ) {}
+
+  /**
+   * The UTC day `at` falls in, as a half-open range. The self-service space
+   * reads attendance in UTC calendar days throughout, so the cap has to count
+   * the same day the employee is looking at.
+   */
+  private utcDay(at: Date): { start: Date; end: Date } {
+    const start = new Date(
+      Date.UTC(at.getUTCFullYear(), at.getUTCMonth(), at.getUTCDate())
+    );
+    return { start, end: new Date(start.getTime() + 86_400_000) };
+  }
+
+  /**
+   * How many times this employee has checked in today and how many they have
+   * left. An open shift counts: it was a check-in, whether or not it is closed
+   * yet, so closing it cannot buy another one.
+   */
+  async getPunchStatus(
+    employeeId: string,
+    now: Date = new Date()
+  ): Promise<{ used: number; allowed: number; remaining: number; warnOnCheckOut: boolean }> {
+    const policy = await this.settings.get();
+    const { start, end } = this.utcDay(now);
+
+    const used = await this.prisma.attendance.count({
+      where: { employeeId, checkIn: { gte: start, lt: end } },
+    });
+
+    return {
+      used,
+      allowed: policy.maxCheckInsPerDay,
+      remaining: Math.max(0, policy.maxCheckInsPerDay - used),
+      warnOnCheckOut: policy.warnOnCheckOut,
+    };
+  }
 
   /**
    * Derive worked hours, overtime and exception status from the raw punches plus
@@ -281,6 +321,29 @@ export class AttendanceService {
     return { deleted: true };
   }
 
+  /**
+   * The same figures for whoever is asking. An account with no employee record
+   * cannot punch at all, so it reports nothing left rather than erroring: the
+   * card is read-only for them either way.
+   */
+  async punchStatusFor(user: AuthenticatedUser): Promise<{
+    used: number;
+    allowed: number;
+    remaining: number;
+    warnOnCheckOut: boolean;
+  }> {
+    if (!user.employeeId) {
+      const policy = await this.settings.get();
+      return {
+        used: 0,
+        allowed: policy.maxCheckInsPerDay,
+        remaining: 0,
+        warnOnCheckOut: policy.warnOnCheckOut,
+      };
+    }
+    return this.getPunchStatus(user.employeeId);
+  }
+
   /** One-click check-in for the signed-in employee. */
   async checkIn(user: AuthenticatedUser): Promise<AttendanceDto> {
     if (!user.employeeId) {
@@ -292,8 +355,21 @@ export class AttendanceService {
     });
     if (open) throw new BadRequestException('You already have an open check-in.');
 
-    const lines = await this.scheduleLinesFor(user.employeeId);
     const now = new Date();
+
+    // The day's cap is the reason a closed shift does not free the card up
+    // again: without this an employee could punch in and out all day and the
+    // attendance report would read as many short shifts rather than one.
+    const punches = await this.getPunchStatus(user.employeeId, now);
+    if (punches.remaining <= 0) {
+      throw new BadRequestException(
+        punches.allowed === 1
+          ? 'You have already checked in today. Ask HR if you need the day reopened.'
+          : `You have used all ${punches.allowed} check-ins allowed today.`
+      );
+    }
+
+    const lines = await this.scheduleLinesFor(user.employeeId);
     const computed = this.computeAttendance(now, null, lines);
 
     const record = await this.prisma.attendance.create({

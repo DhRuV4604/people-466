@@ -5,9 +5,10 @@ import type {
   LeaveBalanceDto,
   LeaveRequestDto,
   PayslipDto,
+  PunchStatusDto,
   TimeOffTypeDto,
 } from "@peoplepay360/shared";
-import { can } from "@peoplepay360/shared";
+import { DEFAULT_APP_SETTINGS, can } from "@peoplepay360/shared";
 
 import { StatusBadge } from "@/components/data/status-badge";
 import { RecordDialog } from "@/components/form";
@@ -37,13 +38,21 @@ export default async function MeHome() {
   const month = thisMonth();
   const canSeePay = can(user.role, "payslips", "read");
 
-  const [attendance, balances, requests, types, payslips] = await Promise.all([
+  const [attendance, punches, balances, requests, types, payslips] = await Promise.all([
     soft(
       apiFetch<AttendanceDto[]>("/attendance", {
         query: { employeeId: user.employeeId, from: month.from, to: month.to, limit: 100 },
       }),
       [],
     ),
+    // Where they stand against the day's cap. A role the endpoint refuses
+    // falls back to a spent day, which only ever hides the button.
+    soft(apiFetch<PunchStatusDto>("/attendance/punch-status"), {
+      used: 0,
+      allowed: DEFAULT_APP_SETTINGS.maxCheckInsPerDay,
+      remaining: 0,
+      warnOnCheckOut: DEFAULT_APP_SETTINGS.warnOnCheckOut,
+    }),
     soft(apiFetch<LeaveBalanceDto[]>(`/time-off/balances/${user.employeeId}`), []),
     soft(
       apiFetch<LeaveRequestDto[]>("/time-off/requests", {
@@ -93,6 +102,7 @@ export default async function MeHome() {
       <PunchCard
         open={open ? { checkIn: open.checkIn } : null}
         workedToday={workedToday}
+        punches={punches}
       />
 
       {/* Balances scroll sideways on a phone rather than stacking: five tiles

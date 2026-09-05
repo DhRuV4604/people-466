@@ -26,7 +26,8 @@ import {
 } from "@/components/data/primitives";
 import { StatusBadge } from "@/components/data/status-badge";
 import { ActionButton } from "@/components/form";
-import { BackLink, Badge, PageHeader } from "@/components/ui";
+import { BreadcrumbTitle } from "@/components/app/breadcrumb-title";
+import { Badge, PageHeader } from "@/components/ui";
 import { ApiError, apiFetch } from "@/lib/api-client";
 import {
   dateRange,
@@ -160,8 +161,9 @@ export default async function PayrunPage({ params }: PageProps) {
 
   return (
     <>
+      <BreadcrumbTitle>{payrun.name}</BreadcrumbTitle>
+
       <PageHeader
-        above={<BackLink href="/payruns">All pay runs</BackLink>}
         title={payrun.name}
         description={STAGE[payrun.status]}
         actions={

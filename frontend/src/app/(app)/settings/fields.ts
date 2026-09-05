@@ -1,12 +1,17 @@
-import { ROLES, ROLE_LABELS, SCHEDULE_TYPES } from "@peoplepay360/shared";
+import {
+  MAX_CHECK_INS_PER_DAY,
+  ROLES,
+  ROLE_LABELS,
+  SCHEDULE_TYPES,
+} from "@peoplepay360/shared";
 
 import type { FieldSpec, Refs } from "@/lib/fields";
 import { statusOptions } from "@/lib/status";
 
 /**
- * The four records the settings screen owns. Each is declared once: the page
- * passes the loaded reference lists, the server action calls the same function
- * bare, because reading a submission only needs the names and types.
+ * The records the settings screen owns. Each is declared once: the page passes
+ * the loaded reference lists, the server action calls the same function bare,
+ * because reading a submission only needs the names and types.
  */
 
 const ROLE_OPTIONS = ROLES.map((role) => ({
@@ -98,5 +103,30 @@ export function userFields(refs?: Partial<Refs>): FieldSpec[] {
       hint: "Links the login to a person, so they can see their own records.",
     },
     { name: "active", label: "Can sign in", type: "switch" },
+  ];
+}
+
+/**
+ * Organisation policy rather than a record, so there is no id and no name: the
+ * form edits the one row the API keeps.
+ */
+export function attendancePolicyFields(): FieldSpec[] {
+  return [
+    {
+      name: "maxCheckInsPerDay",
+      label: "Check-ins per day",
+      type: "number",
+      required: true,
+      min: 1,
+      max: MAX_CHECK_INS_PER_DAY,
+      step: 1,
+      hint: "1 makes the punch card a once-a-day control. Raise it only for split shifts — an employee cannot check in again once the day's are used.",
+    },
+    {
+      name: "warnOnCheckOut",
+      label: "Warn before checking out",
+      type: "switch",
+      hint: "Asks the employee to confirm, naming how many check-ins they have left.",
+    },
   ];
 }

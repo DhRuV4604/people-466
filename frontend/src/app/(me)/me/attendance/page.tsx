@@ -1,6 +1,11 @@
 import type { Metadata } from "next";
 import { CalendarClock } from "lucide-react";
-import type { AttendanceDto, AttendanceSummaryDto } from "@peoplepay360/shared";
+import type {
+  AttendanceDto,
+  AttendanceSummaryDto,
+  PunchStatusDto,
+} from "@peoplepay360/shared";
+import { DEFAULT_APP_SETTINGS } from "@peoplepay360/shared";
 
 import { EmptyState } from "@/components/data/primitives";
 import { StatusBadge } from "@/components/data/status-badge";
@@ -37,9 +42,16 @@ export default async function MeAttendance() {
   const month = thisMonth();
   const query = { employeeId: user.employeeId, from: month.from, to: month.to };
 
-  const [rows, summary] = await Promise.all([
+  const [rows, summary, punches] = await Promise.all([
     soft(apiFetch<AttendanceDto[]>("/attendance", { query: { ...query, limit: 200 } }), []),
     soft(apiFetch<AttendanceSummaryDto | null>("/attendance/summary", { query }), null),
+    // The day's cap, so the card can say what is left before it is tapped.
+    soft(apiFetch<PunchStatusDto>("/attendance/punch-status"), {
+      used: 0,
+      allowed: DEFAULT_APP_SETTINGS.maxCheckInsPerDay,
+      remaining: 0,
+      warnOnCheckOut: DEFAULT_APP_SETTINGS.warnOnCheckOut,
+    }),
   ]);
 
   const open = openShift(rows);
@@ -53,7 +65,11 @@ export default async function MeAttendance() {
     <>
       <h1 className="sr-only">Attendance</h1>
 
-      <PunchCard open={open ? { checkIn: open.checkIn } : null} workedToday={workedToday} />
+      <PunchCard
+        open={open ? { checkIn: open.checkIn } : null}
+        workedToday={workedToday}
+        punches={punches}
+      />
 
       <section aria-labelledby="month">
         <h2 id="month" className="mb-2 text-sm font-medium text-muted-foreground">

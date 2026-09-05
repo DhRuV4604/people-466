@@ -19,9 +19,9 @@ import {
   LeaveBalances,
   loadBalances,
 } from "@/app/(app)/time-off/_components/leave-balances";
+import { BreadcrumbTitle } from "@/components/app/breadcrumb-title";
 import { ActionButton, RecordDialog } from "@/components/form";
 import {
-  BackLink,
   Badge,
   Button,
   Card,
@@ -128,8 +128,9 @@ export default async function EmployeePage({ params }: PageProps) {
 
   return (
     <>
+      <BreadcrumbTitle>{employee.fullName}</BreadcrumbTitle>
+
       <PageHeader
-        above={<BackLink href="/employees">All employees</BackLink>}
         title={employee.fullName}
         description={`${employee.jobPosition?.name ?? "No position"} · ${
           employee.department?.name ?? "No department"
