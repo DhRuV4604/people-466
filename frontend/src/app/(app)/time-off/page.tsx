@@ -5,6 +5,7 @@ import {
   LEAVE_REQUEST_STATUSES,
   LEAVE_UNITS,
   can,
+  scopeToOwnRecords,
   type LeaveAllocationDto,
   type LeaveRequestDto,
   type TimeOffTypeDto,
@@ -114,8 +115,15 @@ export default async function TimeOffPage({
     timeOffTypes: types.filter((type) => type.active).map(toOption),
   };
 
-  const requestForm = requestFields(formRefs);
-  const allocationForm = allocationFields(formRefs);
+  // An employee files only against their own record, so the employee field is
+  // fixed to them rather than offering a list they cannot usefully pick from.
+  const self =
+    scopeToOwnRecords(session.role) && session.employeeId
+      ? { id: session.employeeId, label: session.name }
+      : null;
+
+  const requestForm = requestFields(formRefs, self);
+  const allocationForm = allocationFields(formRefs, self);
   const typeForm = timeOffTypeFields();
 
   const canCreateRequest = can(session.role, "timeOffRequests", "create");
@@ -275,12 +283,18 @@ export default async function TimeOffPage({
             <TabsContent value="allocations" className="flex flex-col gap-6">
               <FilterBar
                 selects={[
-                  {
-                    key: "allocEmployee",
-                    placeholder: "Anyone",
-                    options: refs.employees,
-                    width: "w-56",
-                  },
+                  // An employee's allocations are already only their own, so a
+                  // picker of other people would filter nothing.
+                  ...(self
+                    ? []
+                    : [
+                        {
+                          key: "allocEmployee",
+                          placeholder: "Anyone",
+                          options: refs.employees,
+                          width: "w-56",
+                        },
+                      ]),
                   {
                     key: "allocType",
                     placeholder: "Any type",

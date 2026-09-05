@@ -119,6 +119,14 @@ export default async function AttendancePage({
   // than forwarded, so a hand-written URL cannot widen what they see either.
   const canPickEmployee = !scopeToOwnRecords(session.role);
 
+  // The same rule the picker follows, applied to the create form: someone who
+  // only ever records their own attendance is shown as the employee rather
+  // than asked to find themselves in a list of one.
+  const self =
+    !canPickEmployee && session.employeeId
+      ? { id: session.employeeId, label: session.name }
+      : null;
+
   const canonical = canonicalUrl(params, canPickEmployee);
   if (canonical) redirect(canonical);
 
@@ -303,7 +311,7 @@ export default async function AttendancePage({
               <RecordDialog
                 title="Record attendance"
                 description="For a shift the clock missed. Leave the check-out blank if the shift is still running."
-                fields={attendanceFields(refs)}
+                fields={attendanceFields(refs, self)}
                 action={saveAttendance}
                 submitLabel="Record attendance"
               />

@@ -1,6 +1,6 @@
 import { ATTENDANCE_STATUSES } from "@peoplepay360/shared";
 
-import type { FieldSpec, Refs } from "@/lib/fields";
+import { employeeField, type FieldSpec, type Refs, type SelfEmployee } from "@/lib/fields";
 import { statusOptions } from "@/lib/status";
 
 /**
@@ -8,19 +8,24 @@ import { statusOptions } from "@/lib/status";
  * reference lists; the server action calls it bare, because reading a
  * submission only needs the names and types.
  */
-export function attendanceFields(refs?: Partial<Refs>): FieldSpec[] {
+export function attendanceFields(
+  refs?: Partial<Refs>,
+  self?: SelfEmployee | null,
+): FieldSpec[] {
   return [
-    {
-      name: "employeeId",
-      label: "Employee",
-      type: "select",
-      // Optional on the DTO only because an employee recording their own
-      // attendance has it taken from the session; every other caller is
-      // rejected without it.
-      required: true,
-      span: "full",
-      options: refs?.employees,
-    },
+    employeeField(
+      {
+        name: "employeeId",
+        label: "Employee",
+        // Optional on the DTO only because an employee recording their own
+        // attendance has it taken from the session; every other caller is
+        // rejected without it.
+        required: true,
+        span: "full",
+      },
+      refs,
+      self,
+    ),
     { name: "checkIn", label: "Check-in", type: "datetime", required: true },
     {
       name: "checkOut",

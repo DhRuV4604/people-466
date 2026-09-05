@@ -192,6 +192,11 @@ function text(value: unknown): string {
   return value === null || value === undefined ? "" : String(value);
 }
 
+/** The label a select would have shown for this value, when it has one. */
+function optionLabel(field: FieldSpec, value: string): string | undefined {
+  return field.options?.find((option) => option.value === value)?.label;
+}
+
 /**
  * The calendar day, as "2024-06-01".
  *
@@ -246,12 +251,29 @@ function FormControl({
   const type = field.type ?? "text";
 
   // The select, switch and date controls are not native inputs, so each keeps
-  // its value in state and posts it through a hidden input.
+  // its value in state and posts it through a hidden input. Declared before
+  // any branch below, because a hook cannot sit behind a condition.
   const [value, setValue] = React.useState(() => {
     if (type === "date") return toDateValue(defaultValue);
     if (type === "switch") return defaultValue ? "on" : "";
     return text(defaultValue);
   });
+
+  // A locked field is not a control: it posts its value and says what it is.
+  if (field.locked) {
+    const posted = text(field.defaultValue ?? defaultValue);
+    return (
+      <>
+        <input type="hidden" name={field.name} value={posted} />
+        <div
+          id={id}
+          className="flex min-h-12 items-center rounded-xl border border-input bg-muted/40 px-3.5 py-2 text-sm text-muted-foreground"
+        >
+          {field.lockedLabel ?? optionLabel(field, posted) ?? posted ?? "—"}
+        </div>
+      </>
+    );
+  }
 
   if (type === "select") {
     // A select cannot be emptied by clicking away from it, so a field that is

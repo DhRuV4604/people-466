@@ -1,6 +1,6 @@
 import { ALLOCATION_STATUSES, LEAVE_UNITS } from "@peoplepay360/shared";
 
-import type { FieldSpec, Refs } from "@/lib/fields";
+import { employeeField, type FieldSpec, type Refs, type SelfEmployee } from "@/lib/fields";
 import { statusOptions } from "@/lib/status";
 
 /**
@@ -9,19 +9,25 @@ import { statusOptions } from "@/lib/status";
  * reading a submission only needs the names and types.
  */
 
-export function requestFields(refs?: Partial<Refs>): FieldSpec[] {
+export function requestFields(
+  refs?: Partial<Refs>,
+  self?: SelfEmployee | null,
+): FieldSpec[] {
   return [
-    {
-      // A filed request belongs to whoever it was filed for: the API keeps the
-      // employee it already has and ignores the one a PATCH sends, so offering
-      // the select on an edit would be a control that quietly does nothing.
-      name: "employeeId",
-      label: "Employee",
-      type: "select",
-      required: true,
-      createOnly: true,
-      options: refs?.employees,
-    },
+    employeeField(
+      {
+        // A filed request belongs to whoever it was filed for: the API keeps
+        // the employee it already has and ignores the one a PATCH sends, so
+        // offering the select on an edit would be a control that quietly does
+        // nothing.
+        name: "employeeId",
+        label: "Employee",
+        required: true,
+        createOnly: true,
+      },
+      refs,
+      self,
+    ),
     {
       name: "typeId",
       label: "Type",
@@ -48,18 +54,23 @@ export function requestFields(refs?: Partial<Refs>): FieldSpec[] {
   ];
 }
 
-export function allocationFields(refs?: Partial<Refs>): FieldSpec[] {
+export function allocationFields(
+  refs?: Partial<Refs>,
+  self?: SelfEmployee | null,
+): FieldSpec[] {
   return [
-    {
-      // As with a request, the API drops the employee on an update rather than
-      // moving the granted balance to someone else.
-      name: "employeeId",
-      label: "Employee",
-      type: "select",
-      required: true,
-      createOnly: true,
-      options: refs?.employees,
-    },
+    employeeField(
+      {
+        // As with a request, the API drops the employee on an update rather
+        // than moving the granted balance to someone else.
+        name: "employeeId",
+        label: "Employee",
+        required: true,
+        createOnly: true,
+      },
+      refs,
+      self,
+    ),
     {
       name: "typeId",
       label: "Type",

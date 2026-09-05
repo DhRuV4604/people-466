@@ -36,6 +36,21 @@ export type QuickFilter = {
 const ALL = "__all__";
 
 /**
+ * A select's declared width applies from `sm` up only.
+ *
+ * Screens write plain widths (`w-44`), which on a phone would pin the control
+ * wider than the column it sits in. Prefixing here keeps every call site as it
+ * is while letting the mobile grid size the control instead.
+ */
+function responsiveWidth(width?: string): string {
+  return (width ?? "w-40")
+    .split(" ")
+    .filter(Boolean)
+    .map((token) => (token.includes(":") ? token : `sm:${token}`))
+    .join(" ");
+}
+
+/**
  * The filter bar every list screen uses.
  *
  * Filters live in the URL, so a filtered view can be linked and shared, the
@@ -122,7 +137,7 @@ export function FilterBar({
     <div className="flex flex-col gap-4">
       <div className="flex flex-wrap items-center gap-3">
         {search ? (
-          <InputGroup size="md" className="min-w-[220px] flex-1 sm:max-w-sm">
+          <InputGroup size="md" className="w-full min-w-0 sm:min-w-[220px] sm:flex-1 sm:max-w-sm">
             <InputAddon>
               <Search />
             </InputAddon>
@@ -147,12 +162,15 @@ export function FilterBar({
         ) : null}
 
         {selects.length > 0 ? (
-          <div className="flex flex-wrap items-center gap-3">
+          // A declared width is a desktop width: below sm each select takes
+          // half the row instead, so three of them stack two-up rather than
+          // pushing the bar off the side of a phone.
+          <div className="grid w-full grid-cols-2 items-center gap-3 sm:flex sm:w-auto sm:flex-wrap">
             {selects.map((select) => (
               <Select
                 key={select.key}
                 size="md"
-                className={select.width ?? "w-40"}
+                className={cn("w-full min-w-0", responsiveWidth(select.width))}
                 placeholder={select.placeholder}
                 options={[
                   { value: ALL, label: select.placeholder },
@@ -168,7 +186,7 @@ export function FilterBar({
         ) : null}
 
         {views || actions ? (
-          <div className="ml-auto flex items-center gap-3">
+          <div className="flex w-full items-center gap-3 sm:ml-auto sm:w-auto">
             {views ? (
               <ToggleGroup
                 type="single"
