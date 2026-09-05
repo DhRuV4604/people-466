@@ -8,6 +8,7 @@ import {
   PrismaClient,
   type ComputeType,
   type ContractType,
+  type EmployeeStatus,
   type EmployeeType,
   type RuleCategory,
   type ScheduleType,
@@ -18,6 +19,37 @@ import { mkdir, writeFile } from 'node:fs/promises';
 import { join, resolve } from 'node:path';
 
 const prisma = new PrismaClient();
+
+/**
+ * Names for the generated bulk of the workforce.
+ *
+ * Indian film actors, first and last names held separately and combined at
+ * random: 60 x 60 is far more pairings than the ~275 people needed, so the
+ * roster reads as a real directory rather than a list with obvious repeats,
+ * and nobody in it is quite anyone real.
+ */
+const FIRST_NAMES = [
+  'Amitabh', 'Shah Rukh', 'Aamir', 'Salman', 'Akshay', 'Hrithik', 'Ranbir', 'Ranveer',
+  'Ajay', 'Saif', 'Vicky', 'Rajkummar', 'Ayushmann', 'Sidharth', 'Varun', 'Kartik',
+  'Nawazuddin', 'Irrfan', 'Manoj', 'Pankaj', 'Boman', 'Paresh', 'Anil', 'Jackie',
+  'Rajinikanth', 'Kamal', 'Dhanush', 'Vijay', 'Suriya', 'Vikram', 'Madhavan', 'Fahadh',
+  'Mohanlal', 'Mammootty', 'Prithviraj', 'Dulquer', 'Tovino', 'Nivin', 'Prabhas', 'Allu',
+  'Mahesh', 'Jr NTR', 'Ram Charan', 'Nani', 'Vijay Sethupathi', 'Yash', 'Sudeep', 'Puneeth',
+  'Deepika', 'Priyanka', 'Alia', 'Kareena', 'Katrina', 'Anushka', 'Vidya', 'Kangana',
+  'Tabu', 'Madhuri', 'Sridevi', 'Rani', 'Konkona', 'Radhika', 'Shabana', 'Smita',
+  'Nayanthara', 'Trisha', 'Samantha', 'Rashmika', 'Keerthy', 'Parvathy', 'Taapsee', 'Bhumi',
+];
+
+const LAST_NAMES = [
+  'Bachchan', 'Khan', 'Kapoor', 'Kumar', 'Roshan', 'Singh', 'Devgn', 'Kaushal',
+  'Rao', 'Khurrana', 'Malhotra', 'Dhawan', 'Aaryan', 'Siddiqui', 'Bajpayee', 'Tripathi',
+  'Irani', 'Rawal', 'Shroff', 'Haasan', 'Sethupathi', 'Menon', 'Nair', 'Pillai',
+  'Padukone', 'Chopra', 'Bhatt', 'Ranaut', 'Dixit', 'Mukerji', 'Sen', 'Apte',
+  'Azmi', 'Patil', 'Balan', 'Pannu', 'Pednekar', 'Fernandez', 'Shetty', 'Hegde',
+  'Mandanna', 'Prabhu', 'Varma', 'Reddy', 'Naidu', 'Chowdhury', 'Ganguly', 'Bose',
+  'Iyer', 'Iyengar', 'Krishnan', 'Subramanian', 'Desai', 'Trivedi', 'Joshi', 'Gokhale',
+  'Kulkarni', 'Deshpande', 'Chauhan', 'Rathore', 'Sharma', 'Verma', 'Agarwal', 'Bhardwaj',
+];
 
 const round2 = (n: number) => Math.round((n + Number.EPSILON) * 100) / 100;
 const parseTime = (t: string) => {
@@ -77,45 +109,52 @@ async function giveEveryoneAnAvatar(
   console.log(`Fetching ${employees.length} avatars from DiceBear...`);
   let stored = 0;
 
-  // Sequential on purpose: this is a courtesy call to a free public API, and
-  // forty parallel requests is how a demo seed gets itself rate-limited.
-  for (const employee of employees) {
-    try {
-      const response = await fetch(`${base}?seed=${encodeURIComponent(employee.id)}&size=${size}`, {
-        signal: AbortSignal.timeout(8000),
-      });
-      if (!response.ok) throw new Error(`upstream said ${response.status}`);
+  // A small fixed number of workers share the list. Strictly sequential took
+  // minutes at this headcount and flat-out parallel is how a seed gets itself
+  // rate-limited by a free public API; six at a time is neither.
+  const queue = [...employees];
+  const worker = async (): Promise<void> => {
+    for (;;) {
+      const employee = queue.shift();
+      if (!employee) return;
+      try {
+        const response = await fetch(`${base}?seed=${encodeURIComponent(employee.id)}&size=${size}`, {
+          signal: AbortSignal.timeout(8000),
+        });
+        if (!response.ok) throw new Error(`upstream said ${response.status}`);
 
-      const buffer = Buffer.from(await response.arrayBuffer());
-      // The storage layer would reject a truncated file on upload; the seed
-      // checks the same signature so a bad byte range fails here rather than
-      // becoming an avatar that 500s the first time anyone opens the page.
-      const isPng = buffer.subarray(0, 8).equals(Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]));
-      if (!isPng) throw new Error('what came back was not a PNG');
+        const buffer = Buffer.from(await response.arrayBuffer());
+        // The storage layer would reject a truncated file on upload; the seed
+        // checks the same signature so a bad byte range fails here rather than
+        // becoming an avatar that 500s the first time anyone opens the page.
+        const isPng = buffer.subarray(0, 8).equals(Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]));
+        if (!isPng) throw new Error('what came back was not a PNG');
 
-      const key = `${folder}/${randomUUID()}.png`;
-      await writeFile(join(root, key), buffer);
+        const key = `${folder}/${randomUUID()}.png`;
+        await writeFile(join(root, key), buffer);
 
-      const file = await prisma.storedFile.create({
-        data: {
-          key,
-          filename: 'avatar.png',
-          mimeType: 'image/png',
-          size: buffer.length,
-          checksum: createHash('sha256').update(buffer).digest('hex'),
-          uploadedById,
-        },
-      });
+        const file = await prisma.storedFile.create({
+          data: {
+            key,
+            filename: 'avatar.png',
+            mimeType: 'image/png',
+            size: buffer.length,
+            checksum: createHash('sha256').update(buffer).digest('hex'),
+            uploadedById,
+          },
+        });
 
-      await prisma.employee.update({
-        where: { id: employee.id },
-        data: { avatarId: file.id },
-      });
-      stored += 1;
-    } catch (error) {
-      console.warn(`  no avatar for ${employee.name}: ${error instanceof Error ? error.message : 'unknown'}`);
+        await prisma.employee.update({
+          where: { id: employee.id },
+          data: { avatarId: file.id },
+        });
+        stored += 1;
+      } catch (error) {
+        console.warn(`  no avatar for ${employee.name}: ${error instanceof Error ? error.message : 'unknown'}`);
+      }
     }
-  }
+  };
+  await Promise.all(Array.from({ length: 6 }, worker));
 
   console.log(`  ${stored}/${employees.length} avatars stored`);
 }
@@ -530,6 +569,7 @@ async function main() {
     role?: string;
     isManager?: boolean;
     noBank?: boolean;
+    status?: EmployeeStatus;
   }
 
   const people: Person[] = [
@@ -565,14 +605,149 @@ async function main() {
     { first: 'Ishita', last: 'Ghosh', dept: operations, position: 'Support Specialist', type: 'INTERN', wage: 22000, schedule: fourDaySchedule, noBank: true },
   ];
 
+  // ---- The rest of the workforce, generated.
+  //
+  // The 24 above are hand-written because each carries a specific edge case the
+  // demo depends on (the missing bank details, the night shift, the interns, the
+  // accounts that own a role). These are bulk: enough people that pagination,
+  // department filters, org-wide payroll and the dashboard aggregates are
+  // exercised against a realistic headcount rather than a list that fits on one
+  // screen.
+  //
+  // Seniority is drawn from a weighted band rather than uniformly, because a
+  // company shaped like a pyramid is what the salary distribution and the
+  // manager-to-report ratios are supposed to look like.
+  const BANDS: { position: string; type: EmployeeType; wageFrom: number; wageTo: number; weight: number }[] = [];
+  const bandsByDept: Record<string, typeof BANDS> = {
+    Engineering: [
+      { position: 'Software Engineer', type: 'FULL_TIME', wageFrom: 60000, wageTo: 95000, weight: 40 },
+      { position: 'Senior Software Engineer', type: 'FULL_TIME', wageFrom: 100000, wageTo: 150000, weight: 20 },
+      { position: 'QA Engineer', type: 'FULL_TIME', wageFrom: 55000, wageTo: 85000, weight: 15 },
+      { position: 'Software Engineer', type: 'CONTRACT', wageFrom: 55000, wageTo: 80000, weight: 8 },
+      { position: 'Software Engineer', type: 'INTERN', wageFrom: 20000, wageTo: 30000, weight: 7 },
+      { position: 'Software Engineer', type: 'PART_TIME', wageFrom: 38000, wageTo: 55000, weight: 5 },
+      { position: 'Engineering Manager', type: 'FULL_TIME', wageFrom: 140000, wageTo: 190000, weight: 5 },
+    ],
+    Sales: [
+      { position: 'Sales Executive', type: 'FULL_TIME', wageFrom: 45000, wageTo: 70000, weight: 45 },
+      { position: 'Account Manager', type: 'FULL_TIME', wageFrom: 75000, wageTo: 110000, weight: 25 },
+      { position: 'Sales Executive', type: 'CONTRACT', wageFrom: 45000, wageTo: 65000, weight: 15 },
+      { position: 'Sales Executive', type: 'INTERN', wageFrom: 18000, wageTo: 26000, weight: 8 },
+      { position: 'Sales Director', type: 'FULL_TIME', wageFrom: 130000, wageTo: 175000, weight: 7 },
+    ],
+    'Human Resources': [
+      { position: 'HR Executive', type: 'FULL_TIME', wageFrom: 45000, wageTo: 70000, weight: 45 },
+      { position: 'Recruiter', type: 'FULL_TIME', wageFrom: 48000, wageTo: 75000, weight: 30 },
+      { position: 'HR Executive', type: 'PART_TIME', wageFrom: 30000, wageTo: 42000, weight: 15 },
+      { position: 'HR Manager', type: 'FULL_TIME', wageFrom: 100000, wageTo: 140000, weight: 10 },
+    ],
+    Finance: [
+      { position: 'Accountant', type: 'FULL_TIME', wageFrom: 55000, wageTo: 85000, weight: 50 },
+      { position: 'Payroll Officer', type: 'FULL_TIME', wageFrom: 65000, wageTo: 95000, weight: 25 },
+      { position: 'Accountant', type: 'PART_TIME', wageFrom: 35000, wageTo: 48000, weight: 15 },
+      { position: 'Finance Manager', type: 'FULL_TIME', wageFrom: 120000, wageTo: 160000, weight: 10 },
+    ],
+    Operations: [
+      { position: 'Operations Executive', type: 'FULL_TIME', wageFrom: 45000, wageTo: 72000, weight: 35 },
+      { position: 'Support Specialist', type: 'FULL_TIME', wageFrom: 42000, wageTo: 65000, weight: 35 },
+      { position: 'Support Specialist', type: 'CONTRACT', wageFrom: 40000, wageTo: 60000, weight: 15 },
+      { position: 'Support Specialist', type: 'INTERN', wageFrom: 18000, wageTo: 25000, weight: 8 },
+      { position: 'Operations Manager', type: 'FULL_TIME', wageFrom: 95000, wageTo: 135000, weight: 7 },
+    ],
+  };
+
+  // Mostly active, with a tail of leavers and people on extended leave.
+  const statusRoll = (): EmployeeStatus => {
+    const roll = rand();
+    if (roll > 0.94) return 'INACTIVE';
+    if (roll > 0.90) return 'ON_LEAVE';
+    return 'ACTIVE';
+  };
+
+  const weightedBand = (dept: string) => {
+    const bands = bandsByDept[dept];
+    const total = bands.reduce((sum, b) => sum + b.weight, 0);
+    let roll = rand() * total;
+    for (const b of bands) {
+      roll -= b.weight;
+      if (roll <= 0) return b;
+    }
+    return bands[bands.length - 1];
+  };
+
+  // Headcount per department. Engineering and Operations carry the bulk, which
+  // is what makes the department filters worth testing on unequal sizes.
+  const headcount: { dept: { id: string; name: string }; count: number }[] = [
+    { dept: engineering, count: 95 },
+    { dept: sales, count: 62 },
+    { dept: operations, count: 58 },
+    { dept: finance, count: 34 },
+    { dept: hr, count: 26 },
+  ];
+
+  // Names are drawn without replacement so no two colleagues share one, and the
+  // taken set is primed with the hand-written people for the same reason.
+  const takenNames = new Set(people.map((p) => `${p.first} ${p.last}`));
+  const nameFor = (): { first: string; last: string } | null => {
+    for (let attempt = 0; attempt < 200; attempt++) {
+      const first = pick(FIRST_NAMES);
+      const last = pick(LAST_NAMES);
+      if (!takenNames.has(`${first} ${last}`)) {
+        takenNames.add(`${first} ${last}`);
+        return { first, last };
+      }
+    }
+    return null;
+  };
+
+  for (const { dept, count } of headcount) {
+    for (let n = 0; n < count; n++) {
+      const name = nameFor();
+      if (!name) break;
+      const band = weightedBand(dept.name);
+
+      // Part-timers and interns are on the schedules built for them; a slice of
+      // Operations works nights, because that is the shift that exists there.
+      const schedule =
+        band.type === 'PART_TIME'
+          ? partTimeSchedule
+          : band.type === 'INTERN'
+          ? fourDaySchedule
+          : dept.name === 'Operations' && rand() > 0.7
+          ? nightSchedule
+          : standardSchedule;
+
+      people.push({
+        first: name.first,
+        last: name.last,
+        dept,
+        position: band.position,
+        type: band.type,
+        wage: randInt(band.wageFrom, band.wageTo),
+        schedule,
+        // ~4% are missing bank details, so the payroll warning has a population
+        // to flag rather than the two hand-written cases.
+        noBank: rand() > 0.96,
+        // A workforce that is entirely active has no leavers to exclude from a
+        // payrun and nobody on long leave, which are the two cases the employee
+        // filters and the payroll eligibility check exist for.
+        status: statusRoll(),
+      });
+    }
+  }
+
   const today = new Date();
-  const createdEmployees: { id: string; name: string; dept: string; isManager: boolean; type: string; scheduleId: string; wage: number }[] = [];
+  const createdEmployees: { id: string; name: string; dept: string; isManager: boolean; type: string; scheduleId: string; wage: number; status: EmployeeStatus }[] = [];
   const managerByDept: Record<string, string> = {};
 
   for (let i = 0; i < people.length; i++) {
     const p = people[i];
     const code = `EMP${String(i + 1).padStart(4, '0')}`;
-    const email = `${p.first.toLowerCase()}.${p.last.toLowerCase()}@peoplepay360.com`;
+    // Spaces are stripped rather than passed through: several of the names are
+    // two words ("Shah Rukh", "Ram Charan"), and an address is a unique column,
+    // so it has to be a legal local part every time.
+    const slug = (v: string) => v.toLowerCase().replace(/[^a-z]/g, '');
+    const email = `${slug(p.first)}.${slug(p.last)}@peoplepay360.com`;
 
     // Vary tenure so contract history looks realistic.
     const yearsAgo = randInt(0, 5);
@@ -609,8 +784,15 @@ async function main() {
         bankName: p.noBank ? null : pick(['HDFC Bank', 'ICICI Bank', 'State Bank of India', 'Axis Bank']),
         bankAccountNumber: p.noBank ? null : String(randInt(100000000000, 999999999999)),
         employeeType: p.type,
-        status: 'ACTIVE',
+        status: p.status ?? 'ACTIVE',
         hireDate,
+        // A leaver has a date; anyone still here does not, and the two are set
+        // together because a status without the date it implies is the kind of
+        // half-record the exit screens have to special-case.
+        exitDate:
+          p.status === 'INACTIVE'
+            ? new Date(today.getFullYear(), today.getMonth() - randInt(1, 10), randInt(1, 28))
+            : null,
         departmentId: p.dept.id,
         jobPositionId: positions[p.position].id,
         workingScheduleId: p.schedule.id,
@@ -625,6 +807,7 @@ async function main() {
       type: p.type,
       scheduleId: p.schedule.id,
       wage: p.wage,
+      status: p.status ?? 'ACTIVE',
     });
 
     if (p.isManager) managerByDept[p.dept.name] = employee.id;
@@ -791,6 +974,7 @@ async function main() {
       type: 'FULL_TIME',
       scheduleId: standardSchedule.id,
       wage: 100000,
+      status: 'ACTIVE',
     });
   }
 
@@ -923,51 +1107,51 @@ async function main() {
   const yearStart = new Date(today.getFullYear(), 0, 1);
   const yearEnd = new Date(today.getFullYear(), 11, 31);
 
+  // Built in memory and inserted in chunks: three creates per person was a few
+  // dozen round trips before and would be the better part of a thousand now.
+  const allocationRows: any[] = [];
   for (const emp of createdEmployees) {
     // Everyone gets annual and sick allocations for the year.
-    await prisma.leaveAllocation.create({
-      data: {
-        employeeId: emp.id,
-        typeId: annualLeave.id,
-        quantity: emp.type === 'INTERN' ? 6 : 21,
-        validFrom: yearStart,
-        validTo: yearEnd,
-        status: 'APPROVED',
-        approvedBy: 'System',
-        approvedAt: yearStart,
-        notes: 'Annual entitlement.',
-      },
+    allocationRows.push({
+      employeeId: emp.id,
+      typeId: annualLeave.id,
+      quantity: emp.type === 'INTERN' ? 6 : 21,
+      validFrom: yearStart,
+      validTo: yearEnd,
+      status: 'APPROVED',
+      approvedBy: 'System',
+      approvedAt: yearStart,
+      notes: 'Annual entitlement.',
     });
 
-    await prisma.leaveAllocation.create({
-      data: {
-        employeeId: emp.id,
-        typeId: sickLeave.id,
-        quantity: emp.type === 'INTERN' ? 4 : 12,
-        validFrom: yearStart,
-        validTo: yearEnd,
-        status: 'APPROVED',
-        approvedBy: 'System',
-        approvedAt: yearStart,
-        notes: 'Annual sick entitlement.',
-      },
+    allocationRows.push({
+      employeeId: emp.id,
+      typeId: sickLeave.id,
+      quantity: emp.type === 'INTERN' ? 4 : 12,
+      validFrom: yearStart,
+      validTo: yearEnd,
+      status: 'APPROVED',
+      approvedBy: 'System',
+      approvedAt: yearStart,
+      notes: 'Annual sick entitlement.',
     });
 
-    // Some employees earned comp-off; one allocation is left pending approval so
-    // the approval workflow has something to act on.
+    // Some employees earned comp-off; a share are left pending approval so the
+    // approval workflow has a queue to act on.
     if (rand() > 0.6) {
-      await prisma.leaveAllocation.create({
-        data: {
-          employeeId: emp.id,
-          typeId: compOff.id,
-          quantity: randInt(1, 3),
-          validFrom: new Date(today.getFullYear(), today.getMonth() - 2, 1),
-          validTo: new Date(today.getFullYear(), today.getMonth() + 3, 28),
-          status: rand() > 0.5 ? 'APPROVED' : 'DRAFT',
-          notes: 'Earned for weekend release support.',
-        },
+      allocationRows.push({
+        employeeId: emp.id,
+        typeId: compOff.id,
+        quantity: randInt(1, 3),
+        validFrom: new Date(today.getFullYear(), today.getMonth() - 2, 1),
+        validTo: new Date(today.getFullYear(), today.getMonth() + 3, 28),
+        status: rand() > 0.5 ? 'APPROVED' : 'DRAFT',
+        notes: 'Earned for weekend release support.',
       });
     }
+  }
+  for (let i = 0; i < allocationRows.length; i += 500) {
+    await prisma.leaveAllocation.createMany({ data: allocationRows.slice(i, i + 500) });
   }
 
   // Leave requests spread across the last three months.
@@ -979,6 +1163,17 @@ async function main() {
     'Festival holiday',
     'Not feeling well',
   ];
+
+  // Approved allocations keyed by employee and type, so resolving the one a
+  // request draws down is a lookup rather than a query per request.
+  const approvedAllocations = new Map<string, string>();
+  for (const a of await prisma.leaveAllocation.findMany({
+    where: { status: 'APPROVED' },
+    select: { id: true, employeeId: true, typeId: true },
+  })) {
+    const key = `${a.employeeId}:${a.typeId}`;
+    if (!approvedAllocations.has(key)) approvedAllocations.set(key, a.id);
+  }
 
   let requestCount = 0;
   for (const emp of createdEmployees) {
@@ -1018,10 +1213,7 @@ async function main() {
 
       let allocationId: string | null = null;
       if (type.requiresAllocation && status === 'APPROVED') {
-        const alloc = await prisma.leaveAllocation.findFirst({
-          where: { employeeId: emp.id, typeId: type.id, status: 'APPROVED' },
-        });
-        allocationId = alloc?.id ?? null;
+        allocationId = approvedAllocations.get(`${emp.id}:${type.id}`) ?? null;
         // Without an allocation an allocation-backed leave cannot be approved.
         if (!allocationId) continue;
       }
@@ -1051,8 +1243,23 @@ async function main() {
   // ---------------------------------------------------------------- Historical payruns
   console.log('Creating historical payruns and payslips...');
 
-  // Two completed months so the dashboard's salary trend has real history.
-  for (let monthsBack = 2; monthsBack >= 1; monthsBack--) {
+  // Running contracts, fetched once. Looking one up per employee per period was
+  // fine for a couple of dozen people; at this headcount it is several hundred
+  // round trips to answer a question whose answer does not change.
+  const runningContractByEmployee = new Map<string, { id: string }>();
+  for (const c of await prisma.contract.findMany({
+    where: { status: 'RUNNING' },
+    select: { id: true, employeeId: true },
+  })) {
+    runningContractByEmployee.set(c.employeeId, { id: c.id });
+  }
+
+
+  // Three months: the older two paid so the dashboard's salary trend has real
+  // history, and the most recent left part-way through the workflow so there is
+  // something to validate and pay rather than only finished runs to look at.
+  for (let monthsBack = 3; monthsBack >= 1; monthsBack--) {
+    const inProgress = monthsBack === 1;
     const periodStart = new Date(today.getFullYear(), today.getMonth() - monthsBack, 1);
     const periodEnd = new Date(today.getFullYear(), today.getMonth() - monthsBack + 1, 0, 23, 59, 59);
     const label = periodStart.toLocaleDateString('en-GB', { month: 'long', year: 'numeric' });
@@ -1063,16 +1270,19 @@ async function main() {
         structureId: regularStructure.id,
         periodStart,
         periodEnd,
-        status: 'PAID',
+        status: inProgress ? 'COMPUTED' : 'PAID',
         computedAt: new Date(periodEnd),
-        validatedAt: new Date(periodEnd),
-        paidAt: new Date(periodEnd.getTime() + 2 * 86400000),
-        paidBy: 'Amit Trivedi',
+        validatedAt: inProgress ? null : new Date(periodEnd),
+        paidAt: inProgress ? null : new Date(periodEnd.getTime() + 2 * 86400000),
+        paidBy: inProgress ? null : 'Amit Trivedi',
       },
     });
 
     // Interns run on their own structure, so exclude them from the regular run.
-    const eligible = createdEmployees.filter((e) => e.type !== 'INTERN');
+    // Interns run on their own structure; someone who has left is not paid at
+    // all. Both exclusions are the point of the filter rather than tidiness —
+    // a payrun that quietly pays a leaver is the bug this data is here to catch.
+    const eligible = createdEmployees.filter((e) => e.type !== 'INTERN' && e.status !== 'INACTIVE');
 
     for (let idx = 0; idx < eligible.length; idx++) {
       const emp = eligible[idx];
@@ -1102,11 +1312,14 @@ async function main() {
       const deductions = round2(pf + pt + tds);
       const net = round2(gross - deductions);
 
-      const number = `PS/${periodStart.getFullYear()}/${String(monthsBack * 100 + idx + 1).padStart(6, '0')}`;
+      // Scoped by the period's own month rather than a multiple of the loop
+      // counter: the number is unique across the whole table, and at this
+      // headcount an offset of 100 per month would have run one month's series
+      // straight into the next.
+      const series = (periodStart.getFullYear() * 100 + periodStart.getMonth() + 1) * 10000 + idx + 1;
+      const number = `PS/${periodStart.getFullYear()}/${String(series).padStart(6, '0')}`;
 
-      const contract = await prisma.contract.findFirst({
-        where: { employeeId: emp.id, status: 'RUNNING' },
-      });
+      const contract = runningContractByEmployee.get(emp.id) ?? null;
 
       const payslip = await prisma.payslip.create({
         data: {
@@ -1117,7 +1330,7 @@ async function main() {
           structureId: regularStructure.id,
           periodStart,
           periodEnd,
-          status: 'PAID',
+          status: inProgress ? 'COMPUTED' : 'PAID',
           workedDays,
           workedHours: round2(workedDays * 8),
           leaveDays: 0,
