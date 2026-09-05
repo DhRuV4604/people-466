@@ -124,21 +124,21 @@ function DialogContent({
       <motion.div
         key="dialog-content"
         data-slot="dialog-content"
-        // Vendored from animate-ui, with the 3D flourish removed.
-        //
-        // It used to animate a transform string of
-        // `perspective(500px) rotateX(...) scale(...)` together with a
-        // blur, and both survived the animation: the element kept a 3D
-        // layer and a filter pass for as long as it was open, so every
-        // glyph in it stayed resampled and read soft. On a short
-        // confirmation nobody noticed; on a form with fourteen fields it
-        // is the whole dialog.
-        //
-        // Scale and opacity are values Motion understands, so at rest it
-        // writes `transform: none` and there is no layer left to blur.
-        initial={{ opacity: 0, scale: 0.96 }}
-        animate={{ opacity: 1, scale: 1 }}
-        exit={{ opacity: 0, scale: 0.96 }}
+        initial={{
+          opacity: 0,
+          filter: 'blur(4px)',
+          transform: `perspective(500px) ${rotateAxis}(${initialRotation}) scale(0.8)`,
+        }}
+        animate={{
+          opacity: 1,
+          filter: 'blur(0px)',
+          transform: `perspective(500px) ${rotateAxis}(0deg) scale(1)`,
+        }}
+        exit={{
+          opacity: 0,
+          filter: 'blur(4px)',
+          transform: `perspective(500px) ${rotateAxis}(${initialRotation}) scale(0.8)`,
+        }}
         transition={transition}
         {...props}
       />
