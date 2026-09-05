@@ -104,7 +104,7 @@ export function FilterBar({
   // Debounce typing so a search is one request per pause, not per keystroke.
   React.useEffect(() => {
     if (term === currentQuery) return;
-    const timer = setTimeout(() => apply({ q: term || null }), 350);
+    const timer = setTimeout(() => apply({ q: term || null }), 400);
     return () => clearTimeout(timer);
   }, [term, currentQuery, apply]);
 
