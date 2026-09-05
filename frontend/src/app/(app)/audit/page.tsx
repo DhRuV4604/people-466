@@ -4,9 +4,12 @@ import {
   AUDIT_ACTIONS,
   AUDIT_ACTION_LABELS,
   type AuditLogDto,
+  type Paginated,
 } from "@peoplepay360/shared";
 
 import { FilterBar } from "@/components/data/filter-bar";
+import { Pagination } from "@/components/data/pagination";
+import { pageQuery } from "@/components/data/pagination-params";
 import { EmptyState } from "@/components/data/primitives";
 import { apiFetch } from "@/lib/api-client";
 import { requireAccess } from "@/lib/access";
@@ -20,6 +23,8 @@ export const metadata: Metadata = {
 };
 
 type SearchParams = Promise<{
+  page?: string;
+  pageSize?: string;
   q?: string;
   action?: string;
   entity?: string;
@@ -27,8 +32,6 @@ type SearchParams = Promise<{
 
 /** The trail only grows, so a page of it is the newest matches. Anything older
  *  is reached by narrowing the filters rather than by scrolling. */
-const LIMIT = 200;
-
 /** What the API accepts for `q`. Past it the request is rejected and the whole
  *  screen falls into the error boundary, so a pasted essay is cut instead - it
  *  was never going to match anything the first 200 characters did not. */
@@ -45,14 +48,16 @@ export default async function AuditPage({
 
   const params = await searchParams;
 
-  const rows = await apiFetch<AuditLogDto[]>("/audit-logs", {
+  const logPage = await apiFetch<Paginated<AuditLogDto>>("/audit-logs", {
     query: {
+      ...pageQuery(params),
       q: params.q?.slice(0, MAX_SEARCH),
       action: params.action,
       entity: params.entity,
-      limit: LIMIT,
     },
   });
+
+  const rows = logPage.items;
 
   // `entity` is free text, so a model the trail has learned about since this
   // list was written is still filterable once it shows up in the results.
@@ -92,7 +97,7 @@ export default async function AuditPage({
           { key: "action", value: "DELETE", label: "Deletions" },
           { key: "action", value: "APPROVE", label: "Approvals" },
         ]}
-        count={{ total: rows.length, noun: "entry", plural: "entries" }}
+        count={{ total: logPage.total, noun: "entry", plural: "entries" }}
       />
 
       {rows.length === 0 ? (
@@ -108,6 +113,8 @@ export default async function AuditPage({
       ) : (
         <AuditTrail rows={rows} />
       )}
+
+      <Pagination meta={logPage} noun="entry" plural="entries" />
     </>
   );
 }

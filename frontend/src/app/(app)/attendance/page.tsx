@@ -7,10 +7,13 @@ import {
   scopeToOwnRecords,
   type AttendanceDto,
   type AttendanceSummaryDto,
+  type Paginated,
 } from "@peoplepay360/shared";
 
 import { DataTable, type Column } from "@/components/data/data-table";
 import { FilterBar } from "@/components/data/filter-bar";
+import { Pagination } from "@/components/data/pagination";
+import { pageQuery } from "@/components/data/pagination-params";
 import {
   EmptyState,
   PersonCell,
@@ -46,13 +49,6 @@ export const metadata: Metadata = {
   title: "Attendance",
   description: "Punches, exceptions and corrections.",
 };
-
-/**
- * The API will hand over up to 1000 rows, but a table that long is slow to
- * render and nobody reads to the end of it. A window holding more than this
- * says so under the filters rather than truncating in silence.
- */
-const LIMIT = 200;
 
 type Filters = {
   q?: string;
@@ -127,15 +123,15 @@ export default async function AttendancePage({
 
   // The summary takes the same window and employee, so the tiles describe the
   // rows underneath them rather than some other slice of the year.
-  const [fetched, summary, refs] = await Promise.all([
-    apiFetch<AttendanceDto[]>("/attendance", {
+  const [recordPage, summary, refs] = await Promise.all([
+    apiFetch<Paginated<AttendanceDto>>("/attendance", {
       query: {
+        ...pageQuery(params),
         q: params.q,
         status: params.status,
         employeeId,
         from: period.from,
         to: period.to,
-        limit: LIMIT + 1,
       },
     }),
     apiFetch<AttendanceSummaryDto>("/attendance/summary", {
@@ -144,11 +140,9 @@ export default async function AttendancePage({
     loadRefs(["employees"]),
   ]);
 
-  // The row past the cap is asked for and never shown: its presence is what
-  // says rows were left off the end. Reading that from the summary instead
-  // would misfire, because the summary cannot see the status or search filter.
-  const truncated = fetched.length > LIMIT;
-  const records = truncated ? fetched.slice(0, LIMIT) : fetched;
+  // Nothing is cut off any more: what does not fit on this page is on the
+  // next one, and the control underneath says how many there are.
+  const records = recordPage.items;
 
   const windowLabel = dateRange(period.from, period.to);
   const hasFilters = Boolean(params.q || params.status || employeeId);
@@ -273,7 +267,7 @@ export default async function AttendancePage({
           { key: "status", value: "LATE", label: "Late" },
           { key: "status", value: "ABSENT", label: "Absent" },
         ]}
-        count={{ total: records.length, noun: "record" }}
+        count={{ total: recordPage.total, noun: "record" }}
         actions={
           canCreate ? (
             <>
@@ -311,14 +305,6 @@ export default async function AttendancePage({
           ) : null
         }
       />
-
-      {truncated ? (
-        <p className="text-xs text-muted-foreground">
-          Showing the most recent {LIMIT} records of {windowLabel}. Narrow the
-          period{canPickEmployee ? ", or pick an employee," : ""} to see the
-          rest.
-        </p>
-      ) : null}
 
       {records.length === 0 ? (
         <EmptyState
@@ -413,6 +399,8 @@ export default async function AttendancePage({
           ]}
         />
       )}
+
+      <Pagination meta={recordPage} noun="record" />
     </>
   );
 }

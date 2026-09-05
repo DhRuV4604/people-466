@@ -13,6 +13,7 @@ import {
   type EmailLogDto,
   type PayrunDto,
   type PayrunStatus,
+  type Paginated,
 } from "@peoplepay360/shared";
 
 import { DataTable } from "@/components/data/data-table";
@@ -39,6 +40,7 @@ import {
 import { loadRefs } from "@/lib/refs";
 import { statusLabel } from "@/lib/status";
 import { requireAccess } from "@/lib/access";
+import { ALL_ROWS } from "@/lib/paged";
 
 import {
   computePayrun,
@@ -60,7 +62,8 @@ async function getPayrun(id: string): Promise<PayrunDto | null> {
 }
 
 /** Mirrors the `take` in the API's findLogs(): the outbox is not paginated. */
-const OUTBOX_LIMIT = 200;
+/** What one read of the outbox can carry, matching the API's page ceiling. */
+const OUTBOX_LIMIT = 500;
 
 type Outbox = {
   attempts: EmailLogDto[];
@@ -71,32 +74,23 @@ type Outbox = {
 };
 
 /**
- * The outbox for one run. `/email-logs` takes no query and returns only the
- * most recent 200 attempts across every run, so this run's are picked out
- * here, and a window that could have cut some of them off is reported as
- * incomplete rather than passed off as the whole story.
+ * The outbox for one run. `/email-logs` has no per-run filter, so this reads a
+ * page of the whole outbox and picks this run's attempts out of it.
+ *
+ * The endpoint reports how many rows exist in total, so "did the window cut
+ * some off" is now a fact rather than a guess: if the total exceeds what came
+ * back, older attempts are out of reach and the panel says so instead of
+ * presenting a partial list as the whole story.
  */
 async function getDeliveries(payrun: PayrunDto): Promise<Outbox> {
   try {
-    const logs = await apiFetch<EmailLogDto[]>("/email-logs");
-
-    // Rows fall off the old end of that window. Nothing for this run can have
-    // been lost while the window still reaches back past the run's own
-    // creation, which keeps the warning off every page of a busy outbox and
-    // on the runs where it is actually true. Both are ISO UTC, so comparing
-    // them as strings is comparing the instants.
-    const oldest = logs.reduce<string | null>(
-      (earliest, log) =>
-        earliest === null || log.sentAt < earliest ? log.sentAt : earliest,
-      null,
-    );
+    const outbox = await apiFetch<Paginated<EmailLogDto>>("/email-logs", {
+      query: { pageSize: ALL_ROWS },
+    });
 
     return {
-      attempts: logs.filter((log) => log.payrunId === payrun.id),
-      partial:
-        logs.length >= OUTBOX_LIMIT &&
-        oldest !== null &&
-        oldest > payrun.createdAt,
+      attempts: outbox.items.filter((log) => log.payrunId === payrun.id),
+      partial: outbox.total > outbox.items.length,
       unavailable: false,
     };
   } catch (error) {

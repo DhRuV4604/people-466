@@ -13,6 +13,7 @@ import { Transform, Type } from 'class-transformer';
 import { CONTRACT_STATUSES, CONTRACT_TYPES } from '@peoplepay360/shared';
 import type { ContractStatus, ContractType } from '@peoplepay360/shared';
 import { IsEntityId } from '../../../common/validation/entity-id';
+import { PaginationQueryDto } from '../../../common/pagination';
 
 export class CreateContractDto {
   @ApiProperty({ example: 'Priya Patel — Senior Engineer 2026' })
@@ -72,7 +73,7 @@ export class CreateContractDto {
 
 export class UpdateContractDto extends PartialType(CreateContractDto) {}
 
-export class QueryContractsDto {
+export class QueryContractsDto extends PaginationQueryDto {
   @ApiPropertyOptional({ description: 'Record id' })
   @IsOptional()
   @IsEntityId()

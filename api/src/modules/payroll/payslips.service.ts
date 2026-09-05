@@ -2,6 +2,7 @@ import { Injectable, NotFoundException, BadRequestException } from '@nestjs/comm
 import { Prisma } from '@prisma/client';
 import { workingDaysInRange, type ScheduleLineInput, type PayslipDto } from '@peoplepay360/shared';
 import { PrismaService } from '../../prisma/prisma.service';
+import { pageArgs, paginated } from '../../common/pagination';
 import { toNumber, toDecimal } from '../../common/decimal';
 import { ContractsService } from '../contracts/contracts.service';
 import { AttendanceService } from '../attendance/attendance.service';
@@ -10,6 +11,7 @@ import { PayrollEngineService, type PayrollContext } from './payroll-engine.serv
 import type { AuthenticatedUser } from '../auth/auth.types';
 import { QueryPayslipsDto } from './dto/payroll.dto';
 import { NO_MATCH_ID } from '../../common/scoping';
+import type { Paginated } from '@peoplepay360/shared';
 
 const PAYSLIP_INCLUDE = {
   employee: { include: { department: true, jobPosition: true } },
@@ -264,32 +266,49 @@ export class PayslipsService {
     return `PS/${year}/${String(count + 1).padStart(6, '0')}`;
   }
 
-  async findAll(query: QueryPayslipsDto, user: AuthenticatedUser): Promise<PayslipDto[]> {
+  async findAll(
+    query: QueryPayslipsDto,
+    user: AuthenticatedUser
+  ): Promise<Paginated<PayslipDto>> {
     const scoped =
       user.role === 'EMPLOYEE' ? { employeeId: user.employeeId ?? NO_MATCH_ID } : {};
 
-    const payslips = await this.prisma.payslip.findMany({
-      where: {
-        ...scoped,
-        ...(query.employeeId ? { employeeId: query.employeeId } : {}),
-        ...(query.payrunId ? { payrunId: query.payrunId } : {}),
-        ...(query.status ? { status: query.status } : {}),
-        ...(query.q
-          ? {
-              OR: [
-                { number: { contains: query.q, mode: 'insensitive' as const } },
-                { employee: { firstName: { contains: query.q, mode: 'insensitive' as const } } },
-                { employee: { lastName: { contains: query.q, mode: 'insensitive' as const } } },
-              ],
-            }
-          : {}),
-      },
-      include: PAYSLIP_INCLUDE,
-      orderBy: [{ periodStart: 'desc' }, { number: 'desc' }],
-      take: query.limit ?? 300,
-    });
+    // Hoisted so the count applies exactly the same filter as the page.
+    const where: Prisma.PayslipWhereInput = {
+      ...scoped,
+      ...(query.employeeId ? { employeeId: query.employeeId } : {}),
+      ...(query.payrunId ? { payrunId: query.payrunId } : {}),
+      ...(query.status ? { status: query.status } : {}),
+      ...(query.q
+        ? {
+            OR: [
+              { number: { contains: query.q, mode: 'insensitive' as const } },
+              { employee: { firstName: { contains: query.q, mode: 'insensitive' as const } } },
+              { employee: { lastName: { contains: query.q, mode: 'insensitive' as const } } },
+            ],
+          }
+        : {}),
+    };
 
-    return payslips.map((p) => this.toDto(p));
+    const { skip, take, page, pageSize } = pageArgs(query);
+
+    const [payslips, total] = await this.prisma.$transaction([
+      this.prisma.payslip.findMany({
+        where,
+        include: PAYSLIP_INCLUDE,
+        orderBy: [{ periodStart: 'desc' }, { number: 'desc' }],
+        skip,
+        take,
+      }),
+      this.prisma.payslip.count({ where }),
+    ]);
+
+    return paginated(
+      payslips.map((p) => this.toDto(p)),
+      total,
+      page,
+      pageSize
+    );
   }
 
   async findOne(id: string, user: AuthenticatedUser): Promise<PayslipDto> {

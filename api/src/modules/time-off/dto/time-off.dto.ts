@@ -22,6 +22,7 @@ import {
 } from '@peoplepay360/shared';
 import type { AllocationStatus, LeaveRequestStatus, LeaveUnit } from '@peoplepay360/shared';
 import { IsEntityId } from '../../../common/validation/entity-id';
+import { PaginationQueryDto } from '../../../common/pagination';
 
 // ---------------------------------------------------------------- Types
 
@@ -114,7 +115,7 @@ export class CreateAllocationDto {
 
 export class UpdateAllocationDto extends PartialType(CreateAllocationDto) {}
 
-export class QueryAllocationsDto {
+export class QueryAllocationsDto extends PaginationQueryDto {
   @ApiPropertyOptional({ description: 'Record id' })
   @IsOptional()
   @IsEntityId()
@@ -170,7 +171,7 @@ export class RefuseRequestDto {
   reason?: string;
 }
 
-export class QueryLeaveRequestsDto {
+export class QueryLeaveRequestsDto extends PaginationQueryDto {
   @ApiPropertyOptional({ description: 'Record id' })
   @IsOptional()
   @IsEntityId()

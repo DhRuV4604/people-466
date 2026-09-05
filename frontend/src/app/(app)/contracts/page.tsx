@@ -1,9 +1,11 @@
 import type { Metadata } from "next";
 import { FileText } from "lucide-react";
-import { CONTRACT_STATUSES, can, type ContractDto } from "@peoplepay360/shared";
+import { CONTRACT_STATUSES, can, type ContractDto, type Paginated } from "@peoplepay360/shared";
 
 import { DataTable, type Column } from "@/components/data/data-table";
 import { FilterBar } from "@/components/data/filter-bar";
+import { Pagination } from "@/components/data/pagination";
+import { pageQuery } from "@/components/data/pagination-params";
 import { EmptyState, PersonCell } from "@/components/data/primitives";
 import { StatusBadge } from "@/components/data/status-badge";
 import { RecordDialog, RowActions } from "@/components/form";
@@ -22,6 +24,8 @@ export const metadata: Metadata = {
 };
 
 type SearchParams = Promise<{
+  page?: string;
+  pageSize?: string;
   q?: string;
   status?: string;
   expiring?: string;
@@ -37,9 +41,10 @@ export default async function ContractsPage({
   const params = await searchParams;
   const expiring = params.expiring === "true";
 
-  const [contracts, refs] = await Promise.all([
-    apiFetch<ContractDto[]>("/contracts", {
+  const [contractPage, refs] = await Promise.all([
+    apiFetch<Paginated<ContractDto>>("/contracts", {
       query: {
+        ...pageQuery(params),
         q: params.q,
         status: params.status,
         expiring: expiring ? "true" : undefined,
@@ -47,6 +52,8 @@ export default async function ContractsPage({
     }),
     loadRefs(["employees", "positions", "schedules", "structures"]),
   ]);
+
+  const contracts = contractPage.items;
 
   const canCreate = can(session.role, "contracts", "create");
   const canUpdate = can(session.role, "contracts", "update");
@@ -149,7 +156,7 @@ export default async function ContractsPage({
         quickFilters={[
           { key: "expiring", value: "true", label: "Expiring soon" },
         ]}
-        count={{ total: contracts.length, noun: "contract" }}
+        count={{ total: contractPage.total, noun: "contract" }}
         actions={
           canCreate ? (
             <RecordDialog
@@ -180,6 +187,8 @@ export default async function ContractsPage({
           columns={columns}
         />
       )}
+
+      <Pagination meta={contractPage} noun="contract" />
     </>
   );
 }

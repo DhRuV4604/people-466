@@ -6,6 +6,7 @@ import type {
   LeaveRequestDto,
   PayslipDto,
   TimeOffTypeDto,
+  Paginated,
 } from "@peoplepay360/shared";
 import { can } from "@peoplepay360/shared";
 
@@ -14,6 +15,7 @@ import { RecordDialog } from "@/components/form";
 import { Button, Card } from "@/components/ui";
 import { ApiError, apiFetch } from "@/lib/api-client";
 import { requireMe } from "@/lib/access";
+import { emptyPage } from "@/lib/paged";
 import { dateRange, formatDate, money, pluralise } from "@/lib/format";
 
 import { PdfLink } from "@/app/(app)/payslips/_components/pdf-link";
@@ -37,30 +39,45 @@ export default async function MeHome() {
   const month = thisMonth();
   const canSeePay = can(user.role, "payslips", "read");
 
-  const [attendance, balances, requests, types, payslips] = await Promise.all([
+  const [attendancePage, balances, requestPage, typePage, payslipPage] = await Promise.all([
     soft(
-      apiFetch<AttendanceDto[]>("/attendance", {
-        query: { employeeId: user.employeeId, from: month.from, to: month.to, limit: 100 },
+      apiFetch<Paginated<AttendanceDto>>("/attendance", {
+        query: {
+          employeeId: user.employeeId,
+          from: month.from,
+          to: month.to,
+          pageSize: 100,
+        },
       }),
-      [],
+      emptyPage(),
     ),
     soft(apiFetch<LeaveBalanceDto[]>(`/time-off/balances/${user.employeeId}`), []),
     soft(
-      apiFetch<LeaveRequestDto[]>("/time-off/requests", {
-        query: { employeeId: user.employeeId, limit: 50 },
+      apiFetch<Paginated<LeaveRequestDto>>("/time-off/requests", {
+        query: { employeeId: user.employeeId, pageSize: 50 },
       }),
-      [],
+      emptyPage(),
     ),
-    soft(apiFetch<TimeOffTypeDto[]>("/time-off/types"), []),
+    soft(
+      apiFetch<Paginated<TimeOffTypeDto>>("/time-off/types", {
+        query: { pageSize: 100 },
+      }),
+      emptyPage(),
+    ),
     canSeePay
       ? soft(
-          apiFetch<PayslipDto[]>("/payslips", {
-            query: { employeeId: user.employeeId, limit: 1 },
+          apiFetch<Paginated<PayslipDto>>("/payslips", {
+            query: { employeeId: user.employeeId, pageSize: 1 },
           }),
-          [],
+          emptyPage(),
         )
-      : Promise.resolve([] as PayslipDto[]),
+      : Promise.resolve(emptyPage<PayslipDto>()),
   ]);
+
+  const attendance = attendancePage.items;
+  const requests = requestPage.items;
+  const types = typePage.items;
+  const payslips = payslipPage.items;
 
   const open = openShift(attendance);
   const workedToday = attendance

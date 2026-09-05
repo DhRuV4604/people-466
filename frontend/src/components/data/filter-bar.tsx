@@ -83,6 +83,14 @@ export function FilterBar({
         if (value === null || value === "") next.delete(key);
         else next.set(key, value);
       }
+      // Narrowing the results renumbers them, so page 5 of the old list is
+      // usually past the end of the new one. Every filter change starts again
+      // at the first page; the page size is a preference and survives.
+      //
+      // Any prefixed page key too, for a screen holding more than one list.
+      for (const key of [...next.keys()]) {
+        if (key === "page" || key.endsWith("Page")) next.delete(key);
+      }
       const query = next.toString();
       startTransition(() => {
         router.replace(query ? `${pathname}?${query}` : pathname, {

@@ -1,8 +1,13 @@
 import { Injectable, NotFoundException, Logger } from '@nestjs/common';
 import { EmailClient } from '@azure/communication-email';
 import { ConfigService } from '@nestjs/config';
-import type { EmailLogDto } from '@peoplepay360/shared';
+import type { EmailLogDto, Paginated } from '@peoplepay360/shared';
 import { PrismaService } from '../../prisma/prisma.service';
+import {
+  pageArgs,
+  paginated,
+  type PaginationQueryDto,
+} from '../../common/pagination';
 import { toNumber } from '../../common/decimal';
 import { PdfService } from './pdf.service';
 
@@ -152,14 +157,20 @@ export class MailService {
     return result;
   }
 
-  async findLogs(): Promise<EmailLogDto[]> {
-    const logs = await this.prisma.emailLog.findMany({
-      include: { payrun: { select: { id: true, name: true } } },
-      orderBy: { sentAt: 'desc' },
-      take: 200,
-    });
+  async findLogs(query: PaginationQueryDto = {}): Promise<Paginated<EmailLogDto>> {
+    const { skip, take, page, pageSize } = pageArgs(query);
 
-    return logs.map((e) => ({
+    const [logs, total] = await this.prisma.$transaction([
+      this.prisma.emailLog.findMany({
+        include: { payrun: { select: { id: true, name: true } } },
+        orderBy: { sentAt: 'desc' },
+        skip,
+        take,
+      }),
+      this.prisma.emailLog.count(),
+    ]);
+
+    const items = logs.map((e) => ({
       id: e.id,
       payslipId: e.payslipId,
       payrunId: e.payrunId,
@@ -172,6 +183,8 @@ export class MailService {
       error: e.error,
       sentAt: e.sentAt.toISOString(),
     }));
+
+    return paginated(items, total, page, pageSize);
   }
 
   /**

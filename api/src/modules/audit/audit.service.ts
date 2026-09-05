@@ -1,7 +1,8 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
-import type { AuditChange, AuditLogDto, Role } from '@peoplepay360/shared';
+import type { AuditChange, AuditLogDto, Role, Paginated } from '@peoplepay360/shared';
 import { PrismaService } from '../../prisma/prisma.service';
+import { pageArgs, paginated } from '../../common/pagination';
 import { QueryAuditLogsDto } from './dto/audit-log.dto';
 import { AUDITED_MODELS, delegateFor, type AuditRow } from './audit.entities';
 import type { AuditActor, AuditEntry } from './audit-context';
@@ -60,7 +61,7 @@ export class AuditService {
     }
   }
 
-  async findAll(query: QueryAuditLogsDto): Promise<AuditLogDto[]> {
+  async findAll(query: QueryAuditLogsDto): Promise<Paginated<AuditLogDto>> {
     const from = query.from ? new Date(query.from) : null;
     const to = query.to ? endOfDay(query.to) : null;
 
@@ -81,15 +82,21 @@ export class AuditService {
         : {}),
     };
 
-    const rows = await this.prisma.auditLog.findMany({
+    const { skip, take, page, pageSize } = pageArgs(query);
+
+    const [rows, total] = await this.prisma.$transaction([
+      this.prisma.auditLog.findMany({
       where,
       // Newest first; the id breaks ties within the same millisecond so paging
       // never shows the same row twice.
       orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
-      take: query.limit ?? 100,
-    });
+        skip,
+        take,
+      }),
+      this.prisma.auditLog.count({ where }),
+    ]);
 
-    return rows.map((row) => ({
+    const items = rows.map((row) => ({
       id: row.id,
       userId: row.userId,
       userName: row.userName,
@@ -104,6 +111,8 @@ export class AuditService {
       ip: row.ip,
       createdAt: row.createdAt.toISOString(),
     }));
+
+    return paginated(items, total, page, pageSize);
   }
 
   /**

@@ -5,8 +5,10 @@ import type {
   EmployeeSummaryDto,
   EmployeeDetailDto,
   EmployeeOptionDto,
+  Paginated,
 } from '@peoplepay360/shared';
 import { PrismaService } from '../../prisma/prisma.service';
+import { pageArgs, paginated } from '../../common/pagination';
 import { NotificationsService } from '../notifications/notifications.service';
 import type { AuthenticatedUser } from '../auth/auth.types';
 import { CreateEmployeeDto, UpdateEmployeeDto, QueryEmployeesDto } from './dto/employee.dto';
@@ -53,7 +55,10 @@ export class EmployeesService {
     };
   }
 
-  async findAll(query: QueryEmployeesDto, user: AuthenticatedUser): Promise<EmployeeSummaryDto[]> {
+  async findAll(
+    query: QueryEmployeesDto,
+    user: AuthenticatedUser
+  ): Promise<Paginated<EmployeeSummaryDto>> {
     // An employee may only ever see their own record.
     const scoped = user.role === 'EMPLOYEE' ? { id: user.employeeId ?? NO_MATCH_ID } : {};
 
@@ -77,14 +82,27 @@ export class EmployeesService {
         : {}),
     };
 
-    const employees = await this.prisma.employee.findMany({
-      where,
-      include: SUMMARY_INCLUDE,
-      orderBy: [{ status: 'asc' }, { firstName: 'asc' }],
-      take: query.limit ?? 300,
-    });
+    const { skip, take, page, pageSize } = pageArgs(query);
 
-    return employees.map((e) => this.toSummary(e));
+    // One round trip: the rows and the count of everything matching the filter,
+    // which is what the page numbers are derived from.
+    const [employees, total] = await this.prisma.$transaction([
+      this.prisma.employee.findMany({
+        where,
+        include: SUMMARY_INCLUDE,
+        orderBy: [{ status: 'asc' }, { firstName: 'asc' }],
+        skip,
+        take,
+      }),
+      this.prisma.employee.count({ where }),
+    ]);
+
+    return paginated(
+      employees.map((e) => this.toSummary(e)),
+      total,
+      page,
+      pageSize
+    );
   }
 
   /**

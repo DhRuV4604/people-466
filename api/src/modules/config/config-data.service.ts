@@ -5,8 +5,14 @@ import {
   type DepartmentDto,
   type JobPositionDto,
   type ScheduleLineInput,
+  type Paginated,
 } from '@peoplepay360/shared';
 import { PrismaService } from '../../prisma/prisma.service';
+import {
+  pageArgs,
+  paginated,
+  type PaginationQueryDto,
+} from '../../common/pagination';
 import { toNumber, toDecimal } from '../../common/decimal';
 import { AuthService } from '../auth/auth.service';
 import type { AuthenticatedUser } from '../auth/auth.types';
@@ -53,15 +59,30 @@ export class ConfigDataService {
     };
   }
 
-  async findSchedules(): Promise<WorkingScheduleDto[]> {
-    const schedules = await this.prisma.workingSchedule.findMany({
-      include: {
-        lines: { orderBy: [{ dayOfWeek: 'asc' }, { startTime: 'asc' }] },
-        _count: { select: { employees: true, contracts: true } },
-      },
-      orderBy: [{ active: 'desc' }, { name: 'asc' }],
-    });
-    return schedules.map((s) => this.scheduleToDto(s));
+  async findSchedules(
+    query: PaginationQueryDto = {}
+  ): Promise<Paginated<WorkingScheduleDto>> {
+    const { skip, take, page, pageSize } = pageArgs(query);
+
+    const [schedules, total] = await this.prisma.$transaction([
+      this.prisma.workingSchedule.findMany({
+        include: {
+          lines: { orderBy: [{ dayOfWeek: 'asc' }, { startTime: 'asc' }] },
+          _count: { select: { employees: true, contracts: true } },
+        },
+        orderBy: [{ active: 'desc' }, { name: 'asc' }],
+        skip,
+        take,
+      }),
+      this.prisma.workingSchedule.count(),
+    ]);
+
+    return paginated(
+      schedules.map((s) => this.scheduleToDto(s)),
+      total,
+      page,
+      pageSize
+    );
   }
 
   async findSchedule(id: string): Promise<WorkingScheduleDto> {
@@ -163,17 +184,32 @@ export class ConfigDataService {
 
   // ---------------------------------------------------------------- Departments
 
-  async findDepartments(): Promise<DepartmentDto[]> {
-    const departments = await this.prisma.department.findMany({
-      include: { _count: { select: { employees: true } } },
-      orderBy: { name: 'asc' },
-    });
-    return departments.map((d) => ({
-      id: d.id,
-      name: d.name,
-      code: d.code,
-      employeeCount: d._count.employees,
-    }));
+  async findDepartments(
+    query: PaginationQueryDto = {}
+  ): Promise<Paginated<DepartmentDto>> {
+    const { skip, take, page, pageSize } = pageArgs(query);
+
+    const [departments, total] = await this.prisma.$transaction([
+      this.prisma.department.findMany({
+        include: { _count: { select: { employees: true } } },
+        orderBy: { name: 'asc' },
+        skip,
+        take,
+      }),
+      this.prisma.department.count(),
+    ]);
+
+    return paginated(
+      departments.map((d) => ({
+        id: d.id,
+        name: d.name,
+        code: d.code,
+        employeeCount: d._count.employees,
+      })),
+      total,
+      page,
+      pageSize
+    );
   }
 
   async createDepartment(dto: UpsertDepartmentDto): Promise<DepartmentDto> {
@@ -208,16 +244,31 @@ export class ConfigDataService {
 
   // ---------------------------------------------------------------- Positions
 
-  async findPositions(): Promise<JobPositionDto[]> {
-    const positions = await this.prisma.jobPosition.findMany({
-      include: { _count: { select: { employees: true } } },
-      orderBy: { name: 'asc' },
-    });
-    return positions.map((p) => ({
-      id: p.id,
-      name: p.name,
-      employeeCount: p._count.employees,
-    }));
+  async findPositions(
+    query: PaginationQueryDto = {}
+  ): Promise<Paginated<JobPositionDto>> {
+    const { skip, take, page, pageSize } = pageArgs(query);
+
+    const [positions, total] = await this.prisma.$transaction([
+      this.prisma.jobPosition.findMany({
+        include: { _count: { select: { employees: true } } },
+        orderBy: { name: 'asc' },
+        skip,
+        take,
+      }),
+      this.prisma.jobPosition.count(),
+    ]);
+
+    return paginated(
+      positions.map((p) => ({
+        id: p.id,
+        name: p.name,
+        employeeCount: p._count.employees,
+      })),
+      total,
+      page,
+      pageSize
+    );
   }
 
   async createPosition(dto: UpsertPositionDto): Promise<JobPositionDto> {
@@ -245,13 +296,41 @@ export class ConfigDataService {
 
   // ---------------------------------------------------------------- Users
 
-  async findUsers() {
-    const users = await this.prisma.user.findMany({
+  /**
+   * One user by id, for returning the row a write just produced. Searching a
+   * page of findUsers would only find it while it happened to be on page one.
+   */
+  private async userById(id: string) {
+    const u = await this.prisma.user.findUniqueOrThrow({
+      where: { id },
       include: { employee: { select: { id: true, firstName: true, lastName: true } } },
-      orderBy: [{ role: 'asc' }, { name: 'asc' }],
     });
 
-    return users.map((u) => ({
+    return {
+      id: u.id,
+      name: u.name,
+      email: u.email,
+      role: u.role,
+      active: u.active,
+      employeeId: u.employee?.id ?? null,
+      employeeName: u.employee ? `${u.employee.firstName} ${u.employee.lastName}` : null,
+    };
+  }
+
+  async findUsers(query: PaginationQueryDto = {}) {
+    const { skip, take, page, pageSize } = pageArgs(query);
+
+    const [users, total] = await this.prisma.$transaction([
+      this.prisma.user.findMany({
+        include: { employee: { select: { id: true, firstName: true, lastName: true } } },
+        orderBy: [{ role: 'asc' }, { name: 'asc' }],
+        skip,
+        take,
+      }),
+      this.prisma.user.count(),
+    ]);
+
+    const items = users.map((u) => ({
       id: u.id,
       name: u.name,
       email: u.email,
@@ -260,6 +339,8 @@ export class ConfigDataService {
       employeeId: u.employee?.id ?? null,
       employeeName: u.employee ? `${u.employee.firstName} ${u.employee.lastName}` : null,
     }));
+
+    return paginated(items, total, page, pageSize);
   }
 
   async createUser(dto: CreateUserDto) {
@@ -280,7 +361,7 @@ export class ConfigDataService {
       });
     }
 
-    return this.findUsers().then((users) => users.find((u) => u.id === created.id));
+    return this.userById(created.id);
   }
 
   async updateUser(id: string, dto: UpdateUserDto) {
@@ -306,7 +387,7 @@ export class ConfigDataService {
       }
     }
 
-    return this.findUsers().then((users) => users.find((u) => u.id === id));
+    return this.userById(id);
   }
 
   async removeUser(id: string, actor: AuthenticatedUser): Promise<{ deleted: true }> {

@@ -15,6 +15,7 @@ import { Transform, Type } from 'class-transformer';
 import { IsEntityId } from '../../../common/validation/entity-id';
 import { EMPLOYEE_TYPES, EMPLOYEE_STATUSES } from '@peoplepay360/shared';
 import type { EmployeeType, EmployeeStatus } from '@peoplepay360/shared';
+import { PaginationQueryDto } from '../../../common/pagination';
 
 export class CreateEmployeeDto {
   @ApiProperty({ example: 'Priya' })
@@ -105,7 +106,7 @@ export class CreateEmployeeDto {
 
 export class UpdateEmployeeDto extends PartialType(CreateEmployeeDto) {}
 
-export class QueryEmployeesDto {
+export class QueryEmployeesDto extends PaginationQueryDto {
   @ApiPropertyOptional({ description: 'Search name, email or employee code' })
   @IsOptional()
   @IsString()

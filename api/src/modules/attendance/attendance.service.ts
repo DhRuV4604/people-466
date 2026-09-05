@@ -13,6 +13,7 @@ import {
   type AttendanceSummaryDto,
 } from '@peoplepay360/shared';
 import { PrismaService } from '../../prisma/prisma.service';
+import { pageArgs, paginated } from '../../common/pagination';
 import { toNumber, toDecimal, round2 } from '../../common/decimal';
 import type { AuthenticatedUser } from '../auth/auth.types';
 import {
@@ -21,6 +22,7 @@ import {
   QueryAttendanceDto,
 } from './dto/attendance.dto';
 import { NO_MATCH_ID } from '../../common/scoping';
+import type { Paginated } from '@peoplepay360/shared';
 
 /** Minutes after the scheduled start before an arrival counts as late. */
 const LATE_GRACE_MINUTES = 15;
@@ -126,7 +128,10 @@ export class AttendanceService {
     }));
   }
 
-  async findAll(query: QueryAttendanceDto, user: AuthenticatedUser): Promise<AttendanceDto[]> {
+  async findAll(
+    query: QueryAttendanceDto,
+    user: AuthenticatedUser
+  ): Promise<Paginated<AttendanceDto>> {
     const scoped =
       user.role === 'EMPLOYEE' ? { employeeId: user.employeeId ?? NO_MATCH_ID } : {};
 
@@ -136,27 +141,41 @@ export class AttendanceService {
       : new Date(now.getFullYear(), now.getMonth(), 1);
     const to = query.to ? new Date(`${query.to}T23:59:59.999`) : now;
 
-    const records = await this.prisma.attendance.findMany({
-      where: {
-        ...scoped,
-        checkIn: { gte: from, lte: to },
-        ...(query.employeeId ? { employeeId: query.employeeId } : {}),
-        ...(query.status ? { status: query.status } : {}),
-        ...(query.q
-          ? {
-              OR: [
-                { employee: { firstName: { contains: query.q, mode: 'insensitive' as const } } },
-                { employee: { lastName: { contains: query.q, mode: 'insensitive' as const } } },
-              ],
-            }
-          : {}),
-      },
-      include: ATTENDANCE_INCLUDE,
-      orderBy: { checkIn: 'desc' },
-      take: query.limit ?? 300,
-    });
+    // Hoisted so the count applies exactly the same filter as the page.
+    const where: Prisma.AttendanceWhereInput = {
+      ...scoped,
+      checkIn: { gte: from, lte: to },
+      ...(query.employeeId ? { employeeId: query.employeeId } : {}),
+      ...(query.status ? { status: query.status } : {}),
+      ...(query.q
+        ? {
+            OR: [
+              { employee: { firstName: { contains: query.q, mode: 'insensitive' as const } } },
+              { employee: { lastName: { contains: query.q, mode: 'insensitive' as const } } },
+            ],
+          }
+        : {}),
+    };
 
-    return records.map((r) => this.toDto(r));
+    const { skip, take, page, pageSize } = pageArgs(query);
+
+    const [records, total] = await this.prisma.$transaction([
+      this.prisma.attendance.findMany({
+        where,
+        include: ATTENDANCE_INCLUDE,
+        orderBy: { checkIn: 'desc' },
+        skip,
+        take,
+      }),
+      this.prisma.attendance.count({ where }),
+    ]);
+
+    return paginated(
+      records.map((r) => this.toDto(r)),
+      total,
+      page,
+      pageSize
+    );
   }
 
   async findOne(id: string, user: AuthenticatedUser): Promise<AttendanceDto> {

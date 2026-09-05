@@ -6,6 +6,7 @@ import {
   Param,
   Patch,
   Post,
+  Query,
 } from '@nestjs/common';
 import { ApiBearerAuth, ApiOperation, ApiTags } from '@nestjs/swagger';
 import { ConfigDataService } from './config-data.service';
@@ -19,6 +20,7 @@ import {
 import { RequirePermission, CurrentUser } from '../../common/decorators';
 import type { AuthenticatedUser } from '../auth/auth.types';
 import { ParseEntityIdPipe } from '../../common/validation/entity-id';
+import { PaginationQueryDto } from '../../common/pagination';
 
 @ApiTags('configuration')
 @ApiBearerAuth()
@@ -30,8 +32,8 @@ export class ConfigDataController {
 
   @Get('working-schedules')
   @RequirePermission('workingSchedules', 'read')
-  findSchedules() {
-    return this.config.findSchedules();
+  findSchedules(@Query() query: PaginationQueryDto) {
+    return this.config.findSchedules(query);
   }
 
   @Get('working-schedules/:id')
@@ -63,8 +65,8 @@ export class ConfigDataController {
 
   @Get('departments')
   @RequirePermission('employees', 'read')
-  findDepartments() {
-    return this.config.findDepartments();
+  findDepartments(@Query() query: PaginationQueryDto) {
+    return this.config.findDepartments(query);
   }
 
   @Post('departments')
@@ -89,8 +91,8 @@ export class ConfigDataController {
 
   @Get('job-positions')
   @RequirePermission('employees', 'read')
-  findPositions() {
-    return this.config.findPositions();
+  findPositions(@Query() query: PaginationQueryDto) {
+    return this.config.findPositions(query);
   }
 
   @Post('job-positions')
@@ -115,8 +117,8 @@ export class ConfigDataController {
 
   @Get('users')
   @RequirePermission('users', 'read')
-  findUsers() {
-    return this.config.findUsers();
+  findUsers(@Query() query: PaginationQueryDto) {
+    return this.config.findUsers(query);
   }
 
   @Post('users')

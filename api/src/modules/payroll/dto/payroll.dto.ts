@@ -30,6 +30,7 @@ import type {
   RuleCategory,
 } from '@peoplepay360/shared';
 import { IsEntityId } from '../../../common/validation/entity-id';
+import { PaginationQueryDto } from '../../../common/pagination';
 
 // ---------------------------------------------------------------- Structures
 
@@ -136,7 +137,7 @@ export class UpsertRuleDto {
   note?: string | null;
 }
 
-export class QueryRulesDto {
+export class QueryRulesDto extends PaginationQueryDto {
   @ApiPropertyOptional({ description: 'Record id' })
   @IsOptional()
   @IsEntityId()
@@ -214,7 +215,7 @@ export class CreatePayrunDto {
   employeeType?: EmployeeType;
 }
 
-export class QueryPayrunsDto {
+export class QueryPayrunsDto extends PaginationQueryDto {
   @ApiPropertyOptional({ enum: PAYRUN_STATUSES })
   @IsOptional()
   @IsEnum(PAYRUN_STATUSES as unknown as object)
@@ -228,7 +229,7 @@ export class QueryPayrunsDto {
 
 // ---------------------------------------------------------------- Payslips
 
-export class QueryPayslipsDto {
+export class QueryPayslipsDto extends PaginationQueryDto {
   @ApiPropertyOptional({ description: 'Record id' })
   @IsOptional()
   @IsEntityId()

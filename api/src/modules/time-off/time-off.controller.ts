@@ -24,6 +24,7 @@ import { RequirePermission, CurrentUser } from '../../common/decorators';
 import type { AuthenticatedUser } from '../auth/auth.types';
 import { NO_MATCH_ID } from '../../common/scoping';
 import { ParseEntityIdPipe } from '../../common/validation/entity-id';
+import { PaginationQueryDto } from '../../common/pagination';
 @ApiTags('time-off')
 @ApiBearerAuth()
 @Controller('time-off')
@@ -34,8 +35,8 @@ export class TimeOffController {
 
   @Get('types')
   @RequirePermission('timeOffTypes', 'read')
-  findTypes() {
-    return this.timeOff.findTypes();
+  findTypes(@Query() query: PaginationQueryDto) {
+    return this.timeOff.findTypes(query);
   }
 
   @Post('types')

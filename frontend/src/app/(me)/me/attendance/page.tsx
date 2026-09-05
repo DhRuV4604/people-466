@@ -1,12 +1,17 @@
 import type { Metadata } from "next";
 import { CalendarClock } from "lucide-react";
-import type { AttendanceDto, AttendanceSummaryDto } from "@peoplepay360/shared";
+import type {
+  AttendanceDto,
+  AttendanceSummaryDto,
+  Paginated,
+} from "@peoplepay360/shared";
 
 import { EmptyState } from "@/components/data/primitives";
 import { StatusBadge } from "@/components/data/status-badge";
 import { Card } from "@/components/ui";
 import { ApiError, apiFetch } from "@/lib/api-client";
 import { requireMe } from "@/lib/access";
+import { ALL_ROWS, emptyPage } from "@/lib/paged";
 import { formatTime, hours } from "@/lib/format";
 
 import { PunchCard } from "../_components/punch-card";
@@ -37,11 +42,17 @@ export default async function MeAttendance() {
   const month = thisMonth();
   const query = { employeeId: user.employeeId, from: month.from, to: month.to };
 
-  const [rows, summary] = await Promise.all([
-    soft(apiFetch<AttendanceDto[]>("/attendance", { query: { ...query, limit: 200 } }), []),
+  const [rowPage, summary] = await Promise.all([
+    soft(
+      apiFetch<Paginated<AttendanceDto>>("/attendance", {
+        query: { ...query, pageSize: ALL_ROWS },
+      }),
+      emptyPage<AttendanceDto>(),
+    ),
     soft(apiFetch<AttendanceSummaryDto | null>("/attendance/summary", { query }), null),
   ]);
 
+  const rows = rowPage.items;
   const open = openShift(rows);
   const workedToday = rows
     .filter((r) => dayKey(r.checkIn) === today() && r.checkOut)

@@ -4,8 +4,9 @@ import { IsDateString, IsEnum, IsInt, IsOptional, IsString, Max, MaxLength, Min 
 import { AUDIT_ACTIONS } from '@peoplepay360/shared';
 import type { AuditAction } from '@peoplepay360/shared';
 import { IsEntityId } from '../../../common/validation/entity-id';
+import { PaginationQueryDto } from '../../../common/pagination';
 
-export class QueryAuditLogsDto {
+export class QueryAuditLogsDto extends PaginationQueryDto {
   @ApiPropertyOptional({ description: 'Matches who acted or what they acted on' })
   @IsOptional()
   @IsString()

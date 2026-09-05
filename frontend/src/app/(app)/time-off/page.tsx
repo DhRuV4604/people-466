@@ -8,9 +8,12 @@ import {
   type LeaveAllocationDto,
   type LeaveRequestDto,
   type TimeOffTypeDto,
+  type Paginated,
 } from "@peoplepay360/shared";
 
 import { FilterBar } from "@/components/data/filter-bar";
+import { Pagination } from "@/components/data/pagination";
+import { pageQuery } from "@/components/data/pagination-params";
 import { EmptyState, StatGrid, StatTile } from "@/components/data/primitives";
 import { RecordDialog } from "@/components/form";
 import {
@@ -21,6 +24,7 @@ import {
 } from "@/components/ui";
 import { ApiError, apiFetch } from "@/lib/api-client";
 import { loadRefs } from "@/lib/refs";
+import { ALL_ROWS, emptyPage } from "@/lib/paged";
 import { statusOptions } from "@/lib/status";
 import { requireAccess } from "@/lib/access";
 
@@ -54,6 +58,10 @@ type SearchParams = Promise<{
   allocEmployee?: string;
   typeUnit?: string;
   typeActive?: string;
+  reqPage?: string;
+  reqPageSize?: string;
+  allocPage?: string;
+  allocPageSize?: string;
 }>;
 
 /**
@@ -78,26 +86,44 @@ export default async function TimeOffPage({
 
   const params = await searchParams;
 
-  const [requests, allocations, types, refs, balances] = await Promise.all([
-    apiFetch<LeaveRequestDto[]>("/time-off/requests", {
-      query: { q: params.q, status: params.status, typeId: params.typeId, limit: 200 },
+  const [requestPage, allocationPage, typePage, refs, balances] = await Promise.all([
+    apiFetch<Paginated<LeaveRequestDto>>("/time-off/requests", {
+      query: {
+        ...pageQuery(params, "req"),
+        q: params.q,
+        status: params.status,
+        typeId: params.typeId,
+      },
     }),
     soft(
-      apiFetch<LeaveAllocationDto[]>("/time-off/allocations", {
+      apiFetch<Paginated<LeaveAllocationDto>>("/time-off/allocations", {
         query: {
+          ...pageQuery(params, "alloc"),
           employeeId: params.allocEmployee,
           typeId: params.allocType,
           status: params.allocStatus,
         },
       }),
-      [],
+      emptyPage<LeaveAllocationDto>(),
     ),
-    soft(apiFetch<TimeOffTypeDto[]>("/time-off/types"), []),
+    // Types are read whole rather than paged: there are a handful of them and
+    // they fill the select on both other tabs, where a page of the list would
+    // silently drop options.
+    soft(
+      apiFetch<Paginated<TimeOffTypeDto>>("/time-off/types", {
+        query: { pageSize: ALL_ROWS },
+      }),
+      emptyPage<TimeOffTypeDto>(),
+    ),
     loadRefs(["employees"]),
     // Only an account tied to an employee record has a balance of its own; an
     // admin who is not on the payroll has nothing to show.
     session.employeeId ? loadBalances(session.employeeId) : null,
   ]);
+
+  const requests = requestPage.items;
+  const allocations = allocationPage.items;
+  const types = typePage.items;
 
   const toOption = (type: TimeOffTypeDto) => ({
     value: type.id,
@@ -246,7 +272,7 @@ export default async function TimeOffPage({
                 { key: "status", value: "TO_APPROVE", label: "To approve" },
                 { key: "status", value: "APPROVED", label: "Approved" },
               ]}
-              count={{ total: requests.length, noun: "request" }}
+              count={{ total: requestPage.total, noun: "request" }}
               actions={
                 canCreateRequest ? (
                   <RecordDialog
@@ -282,6 +308,7 @@ export default async function TimeOffPage({
                 viewerEmployeeId={session.employeeId}
               />
             )}
+            <Pagination meta={requestPage} noun="request" param="req" />
           </TabsContent>
 
           {canReadAllocations ? (
@@ -315,7 +342,7 @@ export default async function TimeOffPage({
                   { key: "allocStatus", value: "DRAFT", label: "Draft" },
                   { key: "allocStatus", value: "APPROVED", label: "Approved" },
                 ]}
-                count={{ total: allocations.length, noun: "allocation" }}
+                count={{ total: allocationPage.total, noun: "allocation" }}
                 actions={
                   canCreateAllocation ? (
                     <RecordDialog
@@ -353,6 +380,7 @@ export default async function TimeOffPage({
                   canApprove={canApproveAllocation}
                 />
               )}
+              <Pagination meta={allocationPage} noun="allocation" param="alloc" />
             </TabsContent>
           ) : null}
 

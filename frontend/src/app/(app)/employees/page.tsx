@@ -5,11 +5,14 @@ import {
   EMPLOYEE_TYPES,
   can,
   type EmployeeSummaryDto,
+  type Paginated,
 } from "@peoplepay360/shared";
 
 import { FilterBar } from "@/components/data/filter-bar";
 import { EmptyState } from "@/components/data/primitives";
 import { RecordDialog } from "@/components/form";
+import { Pagination } from "@/components/data/pagination";
+import { pageQuery } from "@/components/data/pagination-params";
 import { apiFetch } from "@/lib/api-client";
 import { loadRefs } from "@/lib/refs";
 import { statusOptions } from "@/lib/status";
@@ -31,6 +34,8 @@ type SearchParams = Promise<{
   status?: string;
   missingBank?: string;
   view?: string;
+  page?: string;
+  pageSize?: string;
 }>;
 
 export default async function EmployeesPage({
@@ -46,9 +51,10 @@ export default async function EmployeesPage({
 
   // Filtering happens in the API, so the browser never holds the full table
   // and the Employee role's own-records scoping is applied at the source.
-  const [employees, refs] = await Promise.all([
-    apiFetch<EmployeeSummaryDto[]>("/employees", {
+  const [employeePage, refs] = await Promise.all([
+    apiFetch<Paginated<EmployeeSummaryDto>>("/employees", {
       query: {
+        ...pageQuery(params),
         q: params.q,
         departmentId: params.department,
         employeeType: params.type,
@@ -58,6 +64,8 @@ export default async function EmployeesPage({
     }),
     loadRefs(["departments", "positions", "schedules", "employees"]),
   ]);
+
+  const employees = employeePage.items;
 
   const canCreate = can(session.role, "employees", "create");
   const canDelete = can(session.role, "employees", "delete");
@@ -94,7 +102,7 @@ export default async function EmployeesPage({
           { key: "status", value: "ACTIVE", label: "Active" },
           { key: "status", value: "ON_LEAVE", label: "On leave" },
         ]}
-        count={{ total: employees.length, noun: "employee" }}
+        count={{ total: employeePage.total, noun: "employee" }}
         views
         actions={
           canCreate ? (
@@ -124,6 +132,8 @@ export default async function EmployeesPage({
       ) : (
         <EmployeeCards employees={employees} canDelete={canDelete} />
       )}
+
+      <Pagination meta={employeePage} noun="employee" />
     </>
   );
 }

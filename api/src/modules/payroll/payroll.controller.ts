@@ -31,6 +31,7 @@ import { RequirePermission, CurrentUser } from '../../common/decorators';
 import type { AuthenticatedUser } from '../auth/auth.types';
 import { PrismaService } from '../../prisma/prisma.service';
 import { ParseEntityIdPipe } from '../../common/validation/entity-id';
+import { PaginationQueryDto } from '../../common/pagination';
 
 // ---------------------------------------------------------------- Pay runs
 
@@ -186,8 +187,8 @@ export class SalaryConfigController {
 
   @Get('salary-structures')
   @RequirePermission('salaryStructures', 'read')
-  findStructures() {
-    return this.config.findStructures();
+  findStructures(@Query() query: PaginationQueryDto) {
+    return this.config.findStructures(query);
   }
 
   @Get('salary-structures/:id')
@@ -242,7 +243,7 @@ export class SalaryConfigController {
   @Get('email-logs')
   @RequirePermission('payslips', 'read')
   @ApiOperation({ summary: 'Payslip delivery outbox' })
-  findEmailLogs() {
-    return this.mail.findLogs();
+  findEmailLogs(@Query() query: PaginationQueryDto) {
+    return this.mail.findLogs(query);
   }
 }

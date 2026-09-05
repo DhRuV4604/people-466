@@ -3,6 +3,7 @@ import "server-only";
 import { cookies } from "next/headers";
 import { unstable_cache } from "next/cache";
 import type {
+  Paginated,
   DepartmentDto,
   EmployeeOptionDto,
   JobPositionDto,
@@ -49,9 +50,23 @@ const TTL_SECONDS = 300;
  * A role that cannot read a reference list still needs the page it is used on,
  * so a rejected list becomes an empty one rather than an error.
  */
+/**
+ * A dropdown has to offer every option, not the first page of them, so these
+ * ask for the largest page the API will serve. The ceiling is real: past 500
+ * rows a select is the wrong control anyway and the field wants a search.
+ */
+const ALL = 500;
+
 async function soft<T>(path: string, token: string | null): Promise<T[]> {
   try {
-    return await apiFetch<T[]>(path, { token, revalidate: TTL_SECONDS });
+    const answer = await apiFetch<Paginated<T> | T[]>(path, {
+      token,
+      revalidate: TTL_SECONDS,
+      query: { pageSize: ALL },
+    });
+    // The paginated lists return an envelope; /employees/options is a plain
+    // array because a dropdown feed was never a paged list.
+    return Array.isArray(answer) ? answer : answer.items;
   } catch (error) {
     if (error instanceof ApiError) return [];
     throw error;

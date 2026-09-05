@@ -2,10 +2,12 @@ import { Injectable, NotFoundException, BadRequestException } from '@nestjs/comm
 import { Prisma } from '@prisma/client';
 import { resolveContractForPeriod, rangesOverlap, type ContractDto } from '@peoplepay360/shared';
 import { PrismaService } from '../../prisma/prisma.service';
+import { pageArgs, paginated } from '../../common/pagination';
 import { toNumber, toDecimal } from '../../common/decimal';
 import type { AuthenticatedUser } from '../auth/auth.types';
 import { CreateContractDto, UpdateContractDto, QueryContractsDto } from './dto/contract.dto';
 import { NO_MATCH_ID } from '../../common/scoping';
+import type { Paginated } from '@peoplepay360/shared';
 
 const CONTRACT_INCLUDE = {
   employee: { include: { department: true } },
@@ -61,7 +63,10 @@ export class ContractsService {
     };
   }
 
-  async findAll(query: QueryContractsDto, user: AuthenticatedUser): Promise<ContractDto[]> {
+  async findAll(
+    query: QueryContractsDto,
+    user: AuthenticatedUser
+  ): Promise<Paginated<ContractDto>> {
     // An employee may only ever see their own contracts.
     const scoped =
       user.role === 'EMPLOYEE' ? { employeeId: user.employeeId ?? NO_MATCH_ID } : {};
@@ -87,13 +92,22 @@ export class ContractsService {
         : {}),
     };
 
-    const contracts = await this.prisma.contract.findMany({
+    const { skip, take, page, pageSize } = pageArgs(query);
+
+    const [contracts, total] = await this.prisma.$transaction([
+      this.prisma.contract.findMany({
       where,
       include: CONTRACT_INCLUDE,
       orderBy: { dateStart: 'desc' },
-    });
+      skip,
+      take,
+      }),
+      this.prisma.contract.count({ where }),
+    ]);
 
     // Flag which contract actually governs the reference period, per employee.
+    // Resolved across this page only: the flag answers "of the contracts you
+    // are looking at, which one applies", and a page is what you are looking at.
     const periodStart = query.periodStart
       ? new Date(query.periodStart)
       : new Date(now.getFullYear(), now.getMonth(), 1);
@@ -114,7 +128,12 @@ export class ContractsService {
       if (applicable) applicableIds.add(applicable.id);
     }
 
-    return contracts.map((c) => this.toDto(c, applicableIds.has(c.id)));
+    return paginated(
+      contracts.map((c) => this.toDto(c, applicableIds.has(c.id))),
+      total,
+      page,
+      pageSize
+    );
   }
 
   async findOne(id: string, user: AuthenticatedUser): Promise<ContractDto> {

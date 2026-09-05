@@ -4,6 +4,7 @@ import type {
   LeaveBalanceDto,
   LeaveRequestDto,
   TimeOffTypeDto,
+  Paginated,
 } from "@peoplepay360/shared";
 
 import { EmptyState } from "@/components/data/primitives";
@@ -12,6 +13,7 @@ import { ActionButton, RecordDialog } from "@/components/form";
 import { Button, Card } from "@/components/ui";
 import { ApiError, apiFetch } from "@/lib/api-client";
 import { requireMe } from "@/lib/access";
+import { ALL_ROWS, emptyPage } from "@/lib/paged";
 import { dateRange, formatDate, pluralise } from "@/lib/format";
 
 import { LeaveBalances } from "@/app/(app)/time-off/_components/leave-balances";
@@ -83,16 +85,24 @@ function RequestRow({ request }: { request: LeaveRequestDto }) {
 export default async function MeLeave() {
   const user = await requireMe();
 
-  const [balances, requests, types] = await Promise.all([
+  const [balances, requestPage, typePage] = await Promise.all([
     soft(apiFetch<LeaveBalanceDto[]>(`/time-off/balances/${user.employeeId}`), []),
     soft(
-      apiFetch<LeaveRequestDto[]>("/time-off/requests", {
-        query: { employeeId: user.employeeId, limit: 100 },
+      apiFetch<Paginated<LeaveRequestDto>>("/time-off/requests", {
+        query: { employeeId: user.employeeId, pageSize: ALL_ROWS },
       }),
-      [],
+      emptyPage<LeaveRequestDto>(),
     ),
-    soft(apiFetch<TimeOffTypeDto[]>("/time-off/types"), []),
+    soft(
+      apiFetch<Paginated<TimeOffTypeDto>>("/time-off/types", {
+        query: { pageSize: ALL_ROWS },
+      }),
+      emptyPage<TimeOffTypeDto>(),
+    ),
   ]);
+
+  const requests = requestPage.items;
+  const types = typePage.items;
 
   const byDate = [...requests].sort((a, b) => b.dateFrom.localeCompare(a.dateFrom));
   const waiting = byDate.filter((r) => r.status === "TO_APPROVE");

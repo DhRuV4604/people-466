@@ -5,6 +5,7 @@ import type {
   JobPositionDto,
   Role,
   WorkingScheduleDto,
+  Paginated,
 } from "@peoplepay360/shared";
 
 import { DataTable, type Column } from "@/components/data/data-table";
@@ -16,6 +17,9 @@ import { ApiError, apiFetch } from "@/lib/api-client";
 import { hours } from "@/lib/format";
 import { loadRefs } from "@/lib/refs";
 import { requireAccess } from "@/lib/access";
+import { emptyPage } from "@/lib/paged";
+import { Pagination } from "@/components/data/pagination";
+import { pageQuery } from "@/components/data/pagination-params";
 
 import { EditScheduleButton } from "./_components/edit-schedule-button";
 import { ScheduleLinesField } from "./_components/schedule-lines-field";
@@ -61,19 +65,53 @@ async function soft<T>(promise: Promise<T>, fallback: T): Promise<T> {
   }
 }
 
-export default async function SettingsPage() {
+type SearchParams = Promise<Record<string, string | undefined>>;
+
+export default async function SettingsPage({
+  searchParams,
+}: {
+  searchParams: SearchParams;
+}) {
   const session = await requireAccess("workingSchedules");
+  const params = await searchParams;
   const canReadUsers = can(session.role, "users", "read");
 
-  const [departments, positions, schedules, users, refs] = await Promise.all([
-    soft(apiFetch<DepartmentDto[]>("/departments"), []),
-    soft(apiFetch<JobPositionDto[]>("/job-positions"), []),
-    soft(apiFetch<WorkingScheduleDto[]>("/working-schedules"), []),
+  // Four independent tables on one screen, so each carries its own page in the
+  // URL and paging one leaves the others where they were.
+  const [deptPage, posPage, schedulePage, userPage, refs] = await Promise.all([
+    soft(
+      apiFetch<Paginated<DepartmentDto>>("/departments", {
+        query: pageQuery(params, "dept"),
+      }),
+      emptyPage<DepartmentDto>(),
+    ),
+    soft(
+      apiFetch<Paginated<JobPositionDto>>("/job-positions", {
+        query: pageQuery(params, "pos"),
+      }),
+      emptyPage<JobPositionDto>(),
+    ),
+    soft(
+      apiFetch<Paginated<WorkingScheduleDto>>("/working-schedules", {
+        query: pageQuery(params, "sched"),
+      }),
+      emptyPage<WorkingScheduleDto>(),
+    ),
     canReadUsers
-      ? soft(apiFetch<UserRow[]>("/users"), [])
-      : Promise.resolve([] as UserRow[]),
+      ? soft(
+          apiFetch<Paginated<UserRow>>("/users", {
+            query: pageQuery(params, "user"),
+          }),
+          emptyPage<UserRow>(),
+        )
+      : Promise.resolve(emptyPage<UserRow>()),
     loadRefs(["employees"]),
   ]);
+
+  const departments = deptPage.items;
+  const positions = posPage.items;
+  const schedules = schedulePage.items;
+  const users = userPage.items;
 
   // Departments and positions are employee reference data: the API guards
   // those routes with the employees module, not the one this page sits behind.
@@ -270,6 +308,7 @@ export default async function SettingsPage() {
               ]}
             />
           )}
+          <Pagination meta={deptPage} noun="department" param="dept" />
         </Section>
 
         <Section
@@ -310,6 +349,7 @@ export default async function SettingsPage() {
               ]}
             />
           )}
+          <Pagination meta={posPage} noun="position" param="pos" />
         </Section>
       </div>
 
@@ -394,6 +434,7 @@ export default async function SettingsPage() {
             ]}
           />
         )}
+        <Pagination meta={schedulePage} noun="schedule" param="sched" />
       </Section>
 
       {canReadUsers ? (
@@ -458,6 +499,7 @@ export default async function SettingsPage() {
               ]}
             />
           )}
+          <Pagination meta={userPage} noun="user" param="user" />
         </Section>
       ) : null}
     </>

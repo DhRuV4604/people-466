@@ -1,9 +1,11 @@
 import type { Metadata } from "next";
 import { Receipt } from "lucide-react";
-import { PAYSLIP_STATUSES, type PayslipDto } from "@peoplepay360/shared";
+import { PAYSLIP_STATUSES, type PayslipDto, type Paginated } from "@peoplepay360/shared";
 
 import { DataTable } from "@/components/data/data-table";
 import { FilterBar } from "@/components/data/filter-bar";
+import { Pagination } from "@/components/data/pagination";
+import { pageQuery } from "@/components/data/pagination-params";
 import {
   EmptyState,
   PersonCell,
@@ -16,6 +18,7 @@ import { apiFetch } from "@/lib/api-client";
 import { dateRange, money, moneyShort } from "@/lib/format";
 import { statusOptions } from "@/lib/status";
 import { requireAccess } from "@/lib/access";
+import { ALL_ROWS } from "@/lib/paged";
 
 import { PdfLink } from "./_components/pdf-link";
 
@@ -24,7 +27,12 @@ export const metadata: Metadata = {
   description: "Every payslip issued, and what it paid.",
 };
 
-type SearchParams = Promise<{ q?: string; status?: string }>;
+type SearchParams = Promise<{
+  q?: string;
+  status?: string;
+  page?: string;
+  pageSize?: string;
+}>;
 
 export default async function PayslipsPage({
   searchParams,
@@ -34,22 +42,34 @@ export default async function PayslipsPage({
   await requireAccess("payslips");
 
   const params = await searchParams;
-  const payslips = await apiFetch<PayslipDto[]>("/payslips", {
-    query: { q: params.q, status: params.status, limit: 200 },
-  });
+  // Two reads: the page the table shows, and the whole filtered set the
+  // figures above it describe. The totals are about every payslip matching the
+  // filter, not the twenty in view, and a summary endpoint would be the
+  // cheaper way to say that once these tables are genuinely large.
+  const [slipPage, all] = await Promise.all([
+    apiFetch<Paginated<PayslipDto>>("/payslips", {
+      query: { ...pageQuery(params), q: params.q, status: params.status },
+    }),
+    apiFetch<Paginated<PayslipDto>>("/payslips", {
+      query: { q: params.q, status: params.status, pageSize: ALL_ROWS },
+    }),
+  ]);
 
-  const withWarnings = payslips.filter((p) => p.warnings.length > 0).length;
-  const totalNet = payslips.reduce((sum, p) => sum + p.netPay, 0);
+  const payslips = slipPage.items;
+  const everySlip = all.items;
+
+  const withWarnings = everySlip.filter((p) => p.warnings.length > 0).length;
+  const totalNet = everySlip.reduce((sum, p) => sum + p.netPay, 0);
   const hasFilters = Boolean(params.q || params.status);
 
   return (
     <>
       <StatGrid>
-        <StatTile label="Payslips" value={payslips.length} hint="Shown" />
+        <StatTile label="Payslips" value={slipPage.total} hint="Matching the filter" />
         <StatTile label="Net total" value={moneyShort(totalNet)} hint="Across the list" />
         <StatTile
           label="Gross total"
-          value={moneyShort(payslips.reduce((s, p) => s + p.grossPay, 0))}
+          value={moneyShort(everySlip.reduce((s, p) => s + p.grossPay, 0))}
           hint="Before deductions"
         />
         <StatTile
@@ -74,7 +94,7 @@ export default async function PayslipsPage({
           { key: "status", value: "PAID", label: "Paid" },
           { key: "status", value: "DRAFT", label: "Draft" },
         ]}
-        count={{ total: payslips.length, noun: "payslip" }}
+        count={{ total: slipPage.total, noun: "payslip" }}
       />
 
       {payslips.length === 0 ? (
@@ -171,6 +191,8 @@ export default async function PayslipsPage({
           ]}
         />
       )}
+
+      <Pagination meta={slipPage} noun="payslip" />
     </>
   );
 }

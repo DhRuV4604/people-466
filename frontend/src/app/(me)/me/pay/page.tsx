@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
 import { redirect } from "next/navigation";
 import { Receipt } from "lucide-react";
-import { can, type PayslipDto } from "@peoplepay360/shared";
+import { can, type Paginated, type PayslipDto } from "@peoplepay360/shared";
 
 import { EmptyState } from "@/components/data/primitives";
 import { StatusBadge } from "@/components/data/status-badge";
@@ -20,9 +20,10 @@ export default async function MePay() {
 
   let payslips: PayslipDto[] = [];
   try {
-    payslips = await apiFetch<PayslipDto[]>("/payslips", {
-      query: { employeeId: user.employeeId, limit: 36 },
+    const answer = await apiFetch<Paginated<PayslipDto>>("/payslips", {
+      query: { employeeId: user.employeeId, pageSize: 36 },
     });
+    payslips = answer.items;
   } catch (error) {
     if (!(error instanceof ApiError)) throw error;
   }

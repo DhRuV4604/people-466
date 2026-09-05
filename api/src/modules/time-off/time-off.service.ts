@@ -15,6 +15,12 @@ import {
   type TimeOffTypeDto,
 } from '@peoplepay360/shared';
 import { PrismaService } from '../../prisma/prisma.service';
+import {
+  MAX_PAGE_SIZE,
+  pageArgs,
+  paginated,
+  type PaginationQueryDto,
+} from '../../common/pagination';
 import { toNumber, toDecimal, round2 } from '../../common/decimal';
 import type { AuthenticatedUser } from '../auth/auth.types';
 import {
@@ -29,6 +35,7 @@ import {
 } from './dto/time-off.dto';
 import { NO_MATCH_ID } from '../../common/scoping';
 import { NotificationsService } from '../notifications/notifications.service';
+import type { Paginated } from '@peoplepay360/shared';
 
 export interface LeaveValidation {
   ok: boolean;
@@ -46,26 +53,38 @@ export class TimeOffService {
 
   // ---------------------------------------------------------------- Types
 
-  async findTypes(): Promise<TimeOffTypeDto[]> {
-    const types = await this.prisma.timeOffType.findMany({
-      include: { _count: { select: { requests: true, allocations: true } } },
-      orderBy: [{ active: 'desc' }, { name: 'asc' }],
-    });
+  async findTypes(query: PaginationQueryDto = {}): Promise<Paginated<TimeOffTypeDto>> {
+    const { skip, take, page, pageSize } = pageArgs(query);
 
-    return types.map((t) => ({
-      id: t.id,
-      name: t.name,
-      code: t.code,
-      unit: t.unit,
-      requiresAllocation: t.requiresAllocation,
-      requiresApproval: t.requiresApproval,
-      paid: t.paid,
-      colorHex: t.colorHex,
-      maxDaysPerRequest: t.maxDaysPerRequest,
-      active: t.active,
-      requestCount: t._count.requests,
-      allocationCount: t._count.allocations,
-    }));
+    const [types, total] = await this.prisma.$transaction([
+      this.prisma.timeOffType.findMany({
+        include: { _count: { select: { requests: true, allocations: true } } },
+        orderBy: [{ active: 'desc' }, { name: 'asc' }],
+        skip,
+        take,
+      }),
+      this.prisma.timeOffType.count(),
+    ]);
+
+    return paginated(
+      types.map((t) => ({
+        id: t.id,
+        name: t.name,
+        code: t.code,
+        unit: t.unit,
+        requiresAllocation: t.requiresAllocation,
+        requiresApproval: t.requiresApproval,
+        paid: t.paid,
+        colorHex: t.colorHex,
+        maxDaysPerRequest: t.maxDaysPerRequest,
+        active: t.active,
+        requestCount: t._count.requests,
+        allocationCount: t._count.allocations,
+      })),
+      total,
+      page,
+      pageSize
+    );
   }
 
   async createType(dto: UpsertTimeOffTypeDto): Promise<TimeOffTypeDto> {
@@ -84,8 +103,10 @@ export class TimeOffService {
   }
 
   private async findTypeById(id: string): Promise<TimeOffTypeDto> {
-    const types = await this.findTypes();
-    const found = types.find((t) => t.id === id);
+    // There are only ever a handful of leave types, so the whole set fits in
+    // one page and this stays a single lookup.
+    const types = await this.findTypes({ pageSize: MAX_PAGE_SIZE });
+    const found = types.items.find((t) => t.id === id);
     if (!found) throw new NotFoundException('Time off type not found.');
     return found;
   }
@@ -338,26 +359,40 @@ export class TimeOffService {
   async findAllocations(
     query: QueryAllocationsDto,
     user: AuthenticatedUser
-  ): Promise<LeaveAllocationDto[]> {
+  ): Promise<Paginated<LeaveAllocationDto>> {
     const scoped =
       user.role === 'EMPLOYEE' ? { employeeId: user.employeeId ?? NO_MATCH_ID } : {};
 
-    const allocations = await this.prisma.leaveAllocation.findMany({
-      where: {
-        ...scoped,
-        ...(query.employeeId ? { employeeId: query.employeeId } : {}),
-        ...(query.status ? { status: query.status } : {}),
-        ...(query.typeId ? { typeId: query.typeId } : {}),
-      },
-      include: {
-        employee: { include: { department: true } },
-        type: true,
-        requests: { select: { duration: true, status: true } },
-      },
-      orderBy: { createdAt: 'desc' },
-    });
+    const where: Prisma.LeaveAllocationWhereInput = {
+      ...scoped,
+      ...(query.employeeId ? { employeeId: query.employeeId } : {}),
+      ...(query.status ? { status: query.status } : {}),
+      ...(query.typeId ? { typeId: query.typeId } : {}),
+    };
 
-    return allocations.map((a) => this.allocationToDto(a));
+    const { skip, take, page, pageSize } = pageArgs(query);
+
+    const [allocations, total] = await this.prisma.$transaction([
+      this.prisma.leaveAllocation.findMany({
+        where,
+        include: {
+          employee: { include: { department: true } },
+          type: true,
+          requests: { select: { duration: true, status: true } },
+        },
+        orderBy: { createdAt: 'desc' },
+        skip,
+        take,
+      }),
+      this.prisma.leaveAllocation.count({ where }),
+    ]);
+
+    return paginated(
+      allocations.map((a) => this.allocationToDto(a)),
+      total,
+      page,
+      pageSize
+    );
   }
 
   async findAllocation(id: string, user: AuthenticatedUser): Promise<LeaveAllocationDto> {
@@ -534,31 +569,45 @@ export class TimeOffService {
   async findRequests(
     query: QueryLeaveRequestsDto,
     user: AuthenticatedUser
-  ): Promise<LeaveRequestDto[]> {
+  ): Promise<Paginated<LeaveRequestDto>> {
     const scoped =
       user.role === 'EMPLOYEE' ? { employeeId: user.employeeId ?? NO_MATCH_ID } : {};
 
-    const requests = await this.prisma.leaveRequest.findMany({
-      where: {
-        ...scoped,
-        ...(query.employeeId ? { employeeId: query.employeeId } : {}),
-        ...(query.status ? { status: query.status } : {}),
-        ...(query.typeId ? { typeId: query.typeId } : {}),
-        ...(query.q
-          ? {
-              OR: [
-                { employee: { firstName: { contains: query.q, mode: 'insensitive' as const } } },
-                { employee: { lastName: { contains: query.q, mode: 'insensitive' as const } } },
-              ],
-            }
-          : {}),
-      },
-      include: { employee: { include: { department: true } }, type: true },
-      orderBy: { createdAt: 'desc' },
-      take: query.limit ?? 300,
-    });
+    // Hoisted so the count applies exactly the same filter as the page.
+    const where: Prisma.LeaveRequestWhereInput = {
+      ...scoped,
+      ...(query.employeeId ? { employeeId: query.employeeId } : {}),
+      ...(query.status ? { status: query.status } : {}),
+      ...(query.typeId ? { typeId: query.typeId } : {}),
+      ...(query.q
+        ? {
+            OR: [
+              { employee: { firstName: { contains: query.q, mode: 'insensitive' as const } } },
+              { employee: { lastName: { contains: query.q, mode: 'insensitive' as const } } },
+            ],
+          }
+        : {}),
+    };
 
-    return requests.map((r) => this.requestToDto(r));
+    const { skip, take, page, pageSize } = pageArgs(query);
+
+    const [requests, total] = await this.prisma.$transaction([
+      this.prisma.leaveRequest.findMany({
+        where,
+        include: { employee: { include: { department: true } }, type: true },
+        orderBy: { createdAt: 'desc' },
+        skip,
+        take,
+      }),
+      this.prisma.leaveRequest.count({ where }),
+    ]);
+
+    return paginated(
+      requests.map((r) => this.requestToDto(r)),
+      total,
+      page,
+      pageSize
+    );
   }
 
   async findRequest(id: string, user: AuthenticatedUser): Promise<LeaveRequestDto> {

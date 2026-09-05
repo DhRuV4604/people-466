@@ -1,7 +1,12 @@
 import { Injectable, NotFoundException, BadRequestException } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
-import type { SalaryStructureDto, SalaryRuleDto } from '@peoplepay360/shared';
+import type { SalaryStructureDto, SalaryRuleDto, Paginated } from '@peoplepay360/shared';
 import { PrismaService } from '../../prisma/prisma.service';
+import {
+  pageArgs,
+  paginated,
+  type PaginationQueryDto,
+} from '../../common/pagination';
 import { toNumber, toNumberOrNull, toDecimal } from '../../common/decimal';
 import { PayrollEngineService } from './payroll-engine.service';
 import {
@@ -39,13 +44,22 @@ export class SalaryConfigService {
 
   // ---------------------------------------------------------------- Structures
 
-  async findStructures(): Promise<SalaryStructureDto[]> {
-    const structures = await this.prisma.salaryStructure.findMany({
-      include: { _count: { select: { rules: true, contracts: true, payslips: true } } },
-      orderBy: [{ active: 'desc' }, { name: 'asc' }],
-    });
+  async findStructures(
+    query: PaginationQueryDto = {}
+  ): Promise<Paginated<SalaryStructureDto>> {
+    const { skip, take, page, pageSize } = pageArgs(query);
 
-    return structures.map((s) => ({
+    const [structures, total] = await this.prisma.$transaction([
+      this.prisma.salaryStructure.findMany({
+        include: { _count: { select: { rules: true, contracts: true, payslips: true } } },
+        orderBy: [{ active: 'desc' }, { name: 'asc' }],
+        skip,
+        take,
+      }),
+      this.prisma.salaryStructure.count(),
+    ]);
+
+    const items = structures.map((s) => ({
       id: s.id,
       name: s.name,
       code: s.code,
@@ -57,6 +71,8 @@ export class SalaryConfigService {
         payslips: s._count.payslips,
       },
     }));
+
+    return paginated(items, total, page, pageSize);
   }
 
   async findStructure(id: string): Promise<SalaryStructureDto> {
@@ -113,25 +129,39 @@ export class SalaryConfigService {
 
   // ---------------------------------------------------------------- Rules
 
-  async findRules(query: QueryRulesDto): Promise<SalaryRuleDto[]> {
-    const rules = await this.prisma.salaryRule.findMany({
-      where: {
-        ...(query.structureId ? { structureId: query.structureId } : {}),
-        ...(query.category ? { category: query.category } : {}),
-        ...(query.q
-          ? {
-              OR: [
-                { name: { contains: query.q, mode: 'insensitive' as const } },
-                { code: { contains: query.q, mode: 'insensitive' as const } },
-              ],
-            }
-          : {}),
-      },
-      include: { structure: { select: { id: true, name: true } } },
-      orderBy: [{ structure: { name: 'asc' } }, { sequence: 'asc' }],
-    });
+  async findRules(query: QueryRulesDto): Promise<Paginated<SalaryRuleDto>> {
+    const where: Prisma.SalaryRuleWhereInput = {
+      ...(query.structureId ? { structureId: query.structureId } : {}),
+      ...(query.category ? { category: query.category } : {}),
+      ...(query.q
+        ? {
+            OR: [
+              { name: { contains: query.q, mode: 'insensitive' as const } },
+              { code: { contains: query.q, mode: 'insensitive' as const } },
+            ],
+          }
+        : {}),
+    };
 
-    return rules.map((r) => ({ ...this.ruleToDto(r), structure: r.structure }));
+    const { skip, take, page, pageSize } = pageArgs(query);
+
+    const [rules, total] = await this.prisma.$transaction([
+      this.prisma.salaryRule.findMany({
+        where,
+        include: { structure: { select: { id: true, name: true } } },
+        orderBy: [{ structure: { name: 'asc' } }, { sequence: 'asc' }],
+        skip,
+        take,
+      }),
+      this.prisma.salaryRule.count({ where }),
+    ]);
+
+    return paginated(
+      rules.map((r) => ({ ...this.ruleToDto(r), structure: r.structure })),
+      total,
+      page,
+      pageSize
+    );
   }
 
   /** Reject an invalid formula before it is stored so a bad rule cannot break a pay run. */

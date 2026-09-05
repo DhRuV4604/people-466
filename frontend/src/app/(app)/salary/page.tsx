@@ -5,10 +5,13 @@ import {
   can,
   type SalaryRuleDto,
   type SalaryStructureDto,
+  type Paginated,
 } from "@peoplepay360/shared";
 
 import { DataTable, type Column } from "@/components/data/data-table";
 import { FilterBar } from "@/components/data/filter-bar";
+import { Pagination } from "@/components/data/pagination";
+import { pageQuery } from "@/components/data/pagination-params";
 import { EmptyState, Section } from "@/components/data/primitives";
 import { StatusBadge } from "@/components/data/status-badge";
 import { RecordDialog, RowActions } from "@/components/form";
@@ -17,6 +20,8 @@ import { ApiError, apiFetch } from "@/lib/api-client";
 import { money } from "@/lib/format";
 import { statusOptions } from "@/lib/status";
 import { requireAccess } from "@/lib/access";
+import { emptyPage } from "@/lib/paged";
+import { loadRefs } from "@/lib/refs";
 
 import { deleteRule, deleteStructure, saveRule, saveStructure } from "./actions";
 import { NEW_RULE, NEW_STRUCTURE, ruleFields, structureFields } from "./fields";
@@ -27,6 +32,10 @@ export const metadata: Metadata = {
 };
 
 type SearchParams = Promise<{
+  structPage?: string;
+  structPageSize?: string;
+  rulePage?: string;
+  rulePageSize?: string;
   q?: string;
   structureId?: string;
   category?: string;
@@ -50,27 +59,31 @@ export default async function SalaryPage({
 
   const params = await searchParams;
 
-  const [structures, rules] = await Promise.all([
-    apiFetch<SalaryStructureDto[]>("/salary-structures").catch((error) => {
-      if (error instanceof ApiError) return [] as SalaryStructureDto[];
+  const [structurePage, rulePage, refs] = await Promise.all([
+    apiFetch<Paginated<SalaryStructureDto>>("/salary-structures", {
+      query: pageQuery(params, "struct"),
+    }).catch((error) => {
+      if (error instanceof ApiError) return emptyPage<SalaryStructureDto>();
       throw error;
     }),
-    apiFetch<SalaryRuleDto[]>("/salary-rules", {
+    apiFetch<Paginated<SalaryRuleDto>>("/salary-rules", {
       query: {
+        ...pageQuery(params, "rule"),
         q: params.q,
         structureId: params.structureId,
         category: params.category,
       },
     }),
+    loadRefs(["structures"]),
   ]);
 
-  // The rule form's structure select and the rule filter both want the list
-  // this page has already loaded, so it is derived here rather than fetched a
-  // second time through loadRefs.
-  const structureOptions = structures.map((structure) => ({
-    value: structure.id,
-    label: structure.name,
-  }));
+  const structures = structurePage.items;
+  const rules = rulePage.items;
+
+  // The rule form's structure select and the rule filter must offer every
+  // structure, not the page of them on screen, so these come from loadRefs
+  // rather than from the cards above.
+  const structureOptions = refs.structures;
 
   const hasRuleFilters = Boolean(
     params.q || params.structureId || params.category,
@@ -259,6 +272,8 @@ export default async function SalaryPage({
             ))}
           </div>
         )}
+
+        <Pagination meta={structurePage} noun="structure" param="struct" />
       </Section>
 
       <div className="flex flex-col gap-4">
@@ -280,7 +295,7 @@ export default async function SalaryPage({
               width: "w-44",
             },
           ]}
-          count={{ total: rules.length, noun: "rule" }}
+          count={{ total: rulePage.total, noun: "rule" }}
           actions={
             canCreateRule ? (
               <RecordDialog
@@ -312,6 +327,8 @@ export default async function SalaryPage({
             columns={ruleColumns}
           />
         )}
+
+        <Pagination meta={rulePage} noun="rule" param="rule" />
       </div>
     </>
   );

@@ -6,6 +6,7 @@ import {
   type EligibleEmployeeDto,
 } from '@peoplepay360/shared';
 import { PrismaService } from '../../prisma/prisma.service';
+import { MAX_PAGE_SIZE, pageArgs, paginated } from '../../common/pagination';
 import { toNumber, round2 } from '../../common/decimal';
 import { ContractsService } from '../contracts/contracts.service';
 import { PayslipsService } from './payslips.service';
@@ -13,6 +14,7 @@ import { MailService } from './mail.service';
 import { NotificationsService } from '../notifications/notifications.service';
 import type { AuthenticatedUser } from '../auth/auth.types';
 import { CreatePayrunDto, QueryPayrunsDto, EligibilityQueryDto } from './dto/payroll.dto';
+import type { Paginated } from '@peoplepay360/shared';
 
 const PAYRUN_INCLUDE = {
   structure: { select: { id: true, name: true } },
@@ -66,16 +68,31 @@ export class PayrunsService {
     };
   }
 
-  async findAll(query: QueryPayrunsDto): Promise<PayrunDto[]> {
-    const payruns = await this.prisma.payrun.findMany({
-      where: {
-        ...(query.status ? { status: query.status } : {}),
-        ...(query.q ? { name: { contains: query.q, mode: 'insensitive' as const } } : {}),
-      },
-      include: PAYRUN_INCLUDE,
-      orderBy: { periodStart: 'desc' },
-    });
-    return payruns.map((p) => this.toDto(p));
+  async findAll(query: QueryPayrunsDto): Promise<Paginated<PayrunDto>> {
+    // Hoisted so the count applies exactly the same filter as the page.
+    const where: Prisma.PayrunWhereInput = {
+      ...(query.status ? { status: query.status } : {}),
+      ...(query.q ? { name: { contains: query.q, mode: 'insensitive' as const } } : {}),
+    };
+
+    const { skip, take, page, pageSize } = pageArgs(query);
+
+    const [payruns, total] = await this.prisma.$transaction([
+      this.prisma.payrun.findMany({
+        where,
+        include: PAYRUN_INCLUDE,
+        orderBy: { periodStart: 'desc' },
+        skip,
+        take,
+      }),
+      this.prisma.payrun.count({ where }),
+    ]);
+    return paginated(
+      payruns.map((p) => this.toDto(p)),
+      total,
+      page,
+      pageSize
+    );
   }
 
   async findOne(id: string, user: AuthenticatedUser): Promise<PayrunDto> {
@@ -86,11 +103,13 @@ export class PayrunsService {
     if (!payrun) throw new NotFoundException('Pay run not found.');
 
     const [payslips, warnings] = await Promise.all([
-      this.payslips.findAll({ payrunId: id, limit: 1000 }, user),
+      // A run's own payslips are shown in full rather than a page of them, so
+      // this asks for the largest page the API will serve.
+      this.payslips.findAll({ payrunId: id, pageSize: MAX_PAGE_SIZE }, user),
       this.detectWarnings(id),
     ]);
 
-    return { ...this.toDto(payrun), payslips, warnings };
+    return { ...this.toDto(payrun), payslips: payslips.items, warnings };
   }
 
   /**

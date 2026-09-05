@@ -12,6 +12,7 @@ import { Type } from 'class-transformer';
 import { ATTENDANCE_STATUSES } from '@peoplepay360/shared';
 import type { AttendanceStatus } from '@peoplepay360/shared';
 import { IsEntityId } from '../../../common/validation/entity-id';
+import { PaginationQueryDto } from '../../../common/pagination';
 
 export class CreateAttendanceDto {
   @ApiPropertyOptional({
@@ -51,7 +52,7 @@ export class UpdateAttendanceDto extends PartialType(CreateAttendanceDto) {
   editReason?: string;
 }
 
-export class QueryAttendanceDto {
+export class QueryAttendanceDto extends PaginationQueryDto {
   @ApiPropertyOptional({ description: 'Record id' })
   @IsOptional()
   @IsEntityId()

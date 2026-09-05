@@ -6,12 +6,14 @@ import {
   scopeToOwnRecords,
   type ContractDto,
   type EmployeeDetailDto,
+  type Paginated,
 } from "@peoplepay360/shared";
 
 import { StatusBadge } from "@/components/data/status-badge";
 import { Badge, Button, Card, UserAvatar, buttonVariants } from "@/components/ui";
 import { ApiError, apiFetch } from "@/lib/api-client";
 import { landingFor, requireMe } from "@/lib/access";
+import { emptyPage } from "@/lib/paged";
 import {
   EMPLOYEE_TYPE_LABELS,
   dateRange,
@@ -46,17 +48,17 @@ function Row({ label, value }: { label: string; value: React.ReactNode }) {
 export default async function MeProfile() {
   const user = await requireMe();
 
-  const [employee, contracts] = await Promise.all([
+  const [employee, contractPage] = await Promise.all([
     soft(apiFetch<EmployeeDetailDto | null>(`/employees/${user.employeeId}`), null),
     soft(
-      apiFetch<ContractDto[]>("/contracts", {
-        query: { employeeId: user.employeeId, status: "RUNNING" },
+      apiFetch<Paginated<ContractDto>>("/contracts", {
+        query: { employeeId: user.employeeId, status: "RUNNING", pageSize: 10 },
       }),
-      [],
+      emptyPage<ContractDto>(),
     ),
   ]);
 
-  const contract = contracts[0];
+  const contract = contractPage.items[0];
   const hasPanel = !scopeToOwnRecords(user.role);
 
   return (
