@@ -1,0 +1,173 @@
+import "server-only";
+
+import { revalidatePath } from "next/cache";
+
+import { ApiError, apiFetch } from "@/lib/api-client";
+import { readForm, type FieldSpec, type FieldValues } from "@/lib/fields";
+
+/**
+ * The one shape every mutation returns, so `useActionState` looks the same on
+ * every screen: a banner message, per-field messages, and a success flag the
+ * dialog uses to close itself.
+ */
+export type FormState = {
+  ok?: boolean;
+  /** Banner message, for anything not attributable to a single field. */
+  error?: string;
+  fieldErrors?: Record<string, string>;
+  /** Confirmation to show once it succeeded. */
+  message?: string;
+  /** Id of the record that was written, so the caller can navigate to it. */
+  id?: string;
+};
+
+export const FORM_IDLE: FormState = {};
+
+export type ResourceConfig = {
+  /** API collection path, e.g. "/employees". */
+  path: string;
+  fields: FieldSpec[];
+  /** Singular, sentence case: "Employee", "Time off request". */
+  label: string;
+};
+
+/**
+ * Server actions bypass the client router cache, so a write has to say what to
+ * re-render. Every screen here reads live data behind a session cookie and
+ * nothing is statically cached, which makes revalidating the whole tree both
+ * correct and cheaper to maintain than a per-resource path list.
+ */
+function revalidateAll() {
+  revalidatePath("/", "layout");
+}
+
+/**
+ * class-validator returns messages that lead with the property name, so
+ * "wage must not be less than 0" becomes an error on the wage field, reworded
+ * with the label the form actually shows.
+ */
+function toFieldErrors(
+  details: string[] | undefined,
+  fields: FieldSpec[],
+): Record<string, string> | undefined {
+  if (!details?.length) return undefined;
+
+  const byName = new Map(fields.map((field) => [field.name, field.label]));
+  const errors: Record<string, string> = {};
+
+  for (const detail of details) {
+    const name = detail.split(" ")[0];
+    const label = byName.get(name);
+    if (!label || errors[name]) continue;
+    const rest = detail.slice(name.length).trim();
+    errors[name] = rest ? `${label} ${rest}` : detail;
+  }
+
+  return Object.keys(errors).length > 0 ? errors : undefined;
+}
+
+/** Turns any thrown error into something the form can render. */
+function toFormState(error: unknown, fields: FieldSpec[]): FormState {
+  if (error instanceof ApiError) {
+    const fieldErrors = toFieldErrors(error.details, fields);
+    // With every message attributed to a field, the banner would just repeat
+    // the first one.
+    return fieldErrors ? { fieldErrors } : { error: error.message };
+  }
+  throw error;
+}
+
+/**
+ * Create or update, decided by the hidden `id` the edit form carries. One
+ * action per resource covers both, which is why a resource needs roughly ten
+ * lines of its own.
+ */
+export async function saveRecord(
+  config: ResourceConfig,
+  formData: FormData,
+  /** Values the form does not collect, such as an id from the page context. */
+  extra?: FieldValues,
+): Promise<FormState> {
+  const id = String(formData.get("id") ?? "").trim();
+  const { values, fieldErrors } = readForm(formData, config.fields);
+  if (fieldErrors) return { fieldErrors };
+
+  try {
+    const record = await apiFetch<{ id?: string } | undefined>(
+      id ? `${config.path}/${id}` : config.path,
+      { method: id ? "PATCH" : "POST", body: { ...values, ...extra } },
+    );
+    revalidateAll();
+    return {
+      ok: true,
+      id: record?.id ?? id,
+      message: `${config.label} ${id ? "updated" : "created"}.`,
+    };
+  } catch (error) {
+    return toFormState(error, config.fields);
+  }
+}
+
+/**
+ * Several endpoints archive rather than delete once payroll history refers to
+ * the record, and they say which one happened in the response. Reporting
+ * "deleted" either way would tell the user something untrue while the row is
+ * still on screen, so the confirmation is worded from what came back.
+ */
+export async function deleteRecord(
+  config: Pick<ResourceConfig, "path" | "label">,
+  id: string,
+  /** Wording for the archive path, when "kept" understates it. */
+  archivedMessage?: string,
+): Promise<FormState> {
+  try {
+    const result = await apiFetch<
+      { deleted?: boolean; archived?: boolean } | undefined
+    >(`${config.path}/${id}`, { method: "DELETE" });
+    revalidateAll();
+
+    const archived = result?.archived === true || result?.deleted === false;
+    return {
+      ok: true,
+      message: archived
+        ? (archivedMessage ??
+          `${config.label} is still referenced elsewhere, so it was archived rather than deleted.`)
+        : `${config.label} deleted.`,
+    };
+  } catch (error) {
+    return toFormState(error, []);
+  }
+}
+
+/**
+ * A verb the API owns rather than a record edit: approve, refuse, compute,
+ * mark paid. Same return shape, so the button that calls it behaves like
+ * every other one.
+ */
+export async function callAction<T = unknown>(options: {
+  path: string;
+  method?: "POST" | "PATCH" | "DELETE";
+  body?: unknown;
+  /**
+   * Shown on success. Pass a function where the API reports what it actually
+   * did — how many emails went out, say — so the confirmation carries it.
+   */
+  message: string | ((result: T) => string);
+}): Promise<FormState> {
+  try {
+    const result = await apiFetch<T>(options.path, {
+      method: options.method ?? "POST",
+      body: options.body,
+    });
+    revalidateAll();
+    return {
+      ok: true,
+      message:
+        typeof options.message === "function"
+          ? options.message(result)
+          : options.message,
+    };
+  } catch (error) {
+    return toFormState(error, []);
+  }
+}
