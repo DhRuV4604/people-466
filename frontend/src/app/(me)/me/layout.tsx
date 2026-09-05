@@ -7,6 +7,7 @@ import { can, scopeToOwnRecords, type EmployeeDetailDto } from "@peoplepay360/sh
 import { Notifications } from "@/components/app/notifications";
 import { ThemeTogglerButton, UserAvatar, buttonVariants } from "@/components/ui";
 import { requireMe, landingFor } from "@/lib/access";
+import { avatarUrl } from "@/lib/avatar";
 import { ApiError, apiFetch } from "@/lib/api-client";
 
 import { MeNav } from "./_components/me-nav";
@@ -51,14 +52,17 @@ export default async function MeLayout({
   return (
     <div className="flex min-h-dvh flex-col bg-muted/30">
       <header className="sticky top-0 z-20 border-b border-border bg-background/85 backdrop-blur-md">
-        <div className="mx-auto flex h-14 w-full max-w-2xl items-center gap-3 px-4">
+        <div className="mx-auto flex h-14 w-full max-w-2xl items-center gap-3 px-4 md:max-w-6xl md:px-6">
           <Link
             href="/me/profile"
             className="flex min-w-0 flex-1 items-center gap-3 rounded-xl outline-none focus-visible:ring-[3px] focus-visible:ring-ring"
           >
-            <UserAvatar name={user.name} />
+            <UserAvatar
+              name={user.name}
+              src={avatarUrl(user.employeeId, employee?.avatarFileId)}
+            />
             <span className="min-w-0">
-              <span className="block truncate text-sm font-semibold leading-tight">
+              <span className="block truncate text-sm leading-tight font-semibold">
                 {user.name}
               </span>
               {subtitle ? (
@@ -92,7 +96,11 @@ export default async function MeLayout({
 
       {/* Bottom padding clears the fixed bar on a phone; on a desktop there is
           no bar, so the page just breathes. */}
-      <main className="mx-auto flex w-full max-w-2xl flex-1 flex-col gap-5 px-4 pt-5 pb-28 md:pb-10">
+      {/* The column stays a column on a phone and opens up from md, where the
+          home screen lays its cards out in a grid. It was max-w-2xl at every
+          width: 672px of a 1920px monitor, a third of the screen, with a
+          check-in button six hundred pixels wide. */}
+      <main className="mx-auto flex w-full max-w-2xl flex-1 flex-col gap-5 px-4 pt-5 pb-28 md:max-w-6xl md:gap-6 md:px-6 md:pt-6 md:pb-10">
         {children}
       </main>
 

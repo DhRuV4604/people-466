@@ -58,6 +58,7 @@ export default async function MeAttendance() {
       allowed: DEFAULT_APP_SETTINGS.maxCheckInsPerDay,
       remaining: 0,
       warnOnCheckOut: DEFAULT_APP_SETTINGS.warnOnCheckOut,
+      openCheckIn: null,
     }),
   ]);
 

@@ -3,14 +3,11 @@
 import type * as React from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import {
-  CalendarOff,
-  Clock3,
-  FileSignature,
-  House,
-  UserRound,
-  Wallet,
-} from "lucide-react";
+import { CalendarOff, FileSignature, House, Wallet } from "lucide-react";
+
+import { AnimateIcon } from "@/components/animate-ui/icons/icon";
+import { Clock } from "@/components/animate-ui/icons/clock";
+import { UserRound } from "@/components/animate-ui/icons/user-round";
 
 import { cn } from "@/lib/utils";
 
@@ -20,15 +17,20 @@ type Item = {
   icon: React.ComponentType<{ className?: string }>;
   /** A grant this destination depends on. Absent means everyone gets it. */
   needs?: "pay";
+  /** Kept out of the header row, where something else already goes there. */
+  bottomOnly?: boolean;
 };
 
 const ITEMS: Item[] = [
   { href: "/me", label: "Home", icon: House },
   { href: "/me/leave", label: "Leave", icon: CalendarOff },
-  { href: "/me/attendance", label: "Time", icon: Clock3 },
+  { href: "/me/attendance", label: "Time", icon: Clock },
   { href: "/me/pay", label: "Pay", icon: Wallet, needs: "pay" },
   { href: "/me/documents", label: "Docs", icon: FileSignature },
-  { href: "/me/profile", label: "Me", icon: UserRound },
+  // "Me" is the bottom bar only. On a wider screen the avatar and name in the
+  // header are already a link to the same screen, sitting a few centimetres
+  // away — two doors to one room.
+  { href: "/me/profile", label: "Me", icon: UserRound, bottomOnly: true },
 ];
 
 /**
@@ -52,7 +54,11 @@ export function MeNav({
   const isActive = (href: string) =>
     href === "/me" ? pathname === "/me" : pathname.startsWith(href);
 
-  const items = ITEMS.filter((item) => showPay || item.needs !== "pay");
+  const items = ITEMS.filter(
+    (item) =>
+      (showPay || item.needs !== "pay") &&
+      (variant === "bottom" || !item.bottomOnly),
+  );
 
   if (variant === "top") {
     return (
@@ -71,7 +77,11 @@ export function MeNav({
                   : "text-muted-foreground hover:bg-muted hover:text-foreground",
               )}
             >
-              <Icon className="size-4" />
+              <AnimateIcon animateOnHover asChild>
+                <span className="contents">
+                  <Icon className="size-4" />
+                </span>
+              </AnimateIcon>
               {label}
             </Link>
           );
@@ -104,7 +114,11 @@ export function MeNav({
                   active ? "text-primary" : "text-muted-foreground",
                 )}
               >
-                <Icon className={cn("size-5", active && "stroke-[2.25]")} />
+                <AnimateIcon animate={active} asChild>
+                  <span className="contents">
+                    <Icon className={cn("size-5", active && "stroke-[2.25]")} />
+                  </span>
+                </AnimateIcon>
                 {label}
                 {active ? (
                   <span className="absolute top-0 h-0.5 w-8 rounded-full bg-primary" />

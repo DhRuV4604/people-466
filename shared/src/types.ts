@@ -124,7 +124,14 @@ export const DEFAULT_APP_SETTINGS: AppSettingsDto = {
 };
 
 /** The largest number of daily check-ins the policy will accept. */
-export const MAX_CHECK_INS_PER_DAY = 12;
+/**
+ * The ceiling on the punch policy, not the policy itself.
+ *
+ * High enough to stay out of the way of a real shift pattern — a factory floor
+ * on short rotations, a site where people punch in and out around callouts —
+ * while still catching a runaway loop or a typo in the settings box.
+ */
+export const MAX_CHECK_INS_PER_DAY = 48;
 
 /**
  * Where the signed-in employee stands against the daily cap. An open shift
@@ -138,6 +145,16 @@ export interface PunchStatusDto {
   remaining: number;
   /** Whether the punch card should confirm before closing a shift. */
   warnOnCheckOut: boolean;
+  /**
+   * The shift still running, whenever it was opened.
+   *
+   * The API refuses a second check-in while any shift is open, of any date, so
+   * the card has to know about one from last week as surely as one from this
+   * morning. Deriving it from a list of this month's punches left the button
+   * saying "Check in" while the API answered "you already have an open
+   * check-in" — the two were looking at different windows.
+   */
+  openCheckIn: { id: string; checkIn: ISODate } | null;
 }
 
 // ---------------------------------------------------------------- Employees
