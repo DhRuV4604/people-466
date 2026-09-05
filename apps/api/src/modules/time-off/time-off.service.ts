@@ -27,6 +27,7 @@ import {
   UpsertTimeOffTypeDto,
   RefuseRequestDto,
 } from './dto/time-off.dto';
+import { NO_MATCH_ID } from '../../common/scoping';
 
 export interface LeaveValidation {
   ok: boolean;
@@ -335,7 +336,7 @@ export class TimeOffService {
     user: AuthenticatedUser
   ): Promise<LeaveAllocationDto[]> {
     const scoped =
-      user.role === 'EMPLOYEE' ? { employeeId: user.employeeId ?? '__none__' } : {};
+      user.role === 'EMPLOYEE' ? { employeeId: user.employeeId ?? NO_MATCH_ID } : {};
 
     const allocations = await this.prisma.leaveAllocation.findMany({
       where: {
@@ -520,7 +521,7 @@ export class TimeOffService {
     user: AuthenticatedUser
   ): Promise<LeaveRequestDto[]> {
     const scoped =
-      user.role === 'EMPLOYEE' ? { employeeId: user.employeeId ?? '__none__' } : {};
+      user.role === 'EMPLOYEE' ? { employeeId: user.employeeId ?? NO_MATCH_ID } : {};
 
     const requests = await this.prisma.leaveRequest.findMany({
       where: {

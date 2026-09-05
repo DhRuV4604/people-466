@@ -70,13 +70,31 @@ export default async function AppLayout({ children }: { children: React.ReactNod
     items.push({ label: 'Reports', href: '/reports' });
   }
 
+  // An Employee account with no linked employee record can reach every page but
+  // sees nothing, because all its data is scoped to a record that is not there.
+  // Say so, rather than leaving the app looking broken.
+  const unlinked = role === 'EMPLOYEE' && !session.employeeId;
+
   return (
     <div className="min-h-screen bg-slate-50">
       <TopNav
         items={items}
         user={{ name: session.name, email: session.email, role: session.role }}
       />
-      <main className="mx-auto max-w-[1600px] px-4 py-6 sm:px-6">{children}</main>
+      <main className="mx-auto max-w-[1600px] px-4 py-6 sm:px-6">
+        {unlinked && (
+          <div className="mb-5 rounded-xl border border-amber-200 bg-amber-50 p-4">
+            <p className="text-sm font-semibold text-amber-900">
+              This account is not linked to an employee record
+            </p>
+            <p className="mt-1 text-sm text-amber-800">
+              Your pages will stay empty until an administrator links it. In Configuration →
+              Users &amp; Roles, edit this user and set <strong>Linked Employee</strong>.
+            </p>
+          </div>
+        )}
+        {children}
+      </main>
     </div>
   );
 }

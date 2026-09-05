@@ -9,6 +9,7 @@ import { TimeOffService } from '../time-off/time-off.service';
 import { PayrollEngineService, type PayrollContext } from './payroll-engine.service';
 import type { AuthenticatedUser } from '../auth/auth.types';
 import { QueryPayslipsDto } from './dto/payroll.dto';
+import { NO_MATCH_ID } from '../../common/scoping';
 
 const PAYSLIP_INCLUDE = {
   employee: { include: { department: true, jobPosition: true } },
@@ -265,7 +266,7 @@ export class PayslipsService {
 
   async findAll(query: QueryPayslipsDto, user: AuthenticatedUser): Promise<PayslipDto[]> {
     const scoped =
-      user.role === 'EMPLOYEE' ? { employeeId: user.employeeId ?? '__none__' } : {};
+      user.role === 'EMPLOYEE' ? { employeeId: user.employeeId ?? NO_MATCH_ID } : {};
 
     const payslips = await this.prisma.payslip.findMany({
       where: {

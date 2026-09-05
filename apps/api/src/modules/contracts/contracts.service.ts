@@ -5,6 +5,7 @@ import { PrismaService } from '../../prisma/prisma.service';
 import { toNumber, toDecimal } from '../../common/decimal';
 import type { AuthenticatedUser } from '../auth/auth.types';
 import { CreateContractDto, UpdateContractDto, QueryContractsDto } from './dto/contract.dto';
+import { NO_MATCH_ID } from '../../common/scoping';
 
 const CONTRACT_INCLUDE = {
   employee: { include: { department: true } },
@@ -63,7 +64,7 @@ export class ContractsService {
   async findAll(query: QueryContractsDto, user: AuthenticatedUser): Promise<ContractDto[]> {
     // An employee may only ever see their own contracts.
     const scoped =
-      user.role === 'EMPLOYEE' ? { employeeId: user.employeeId ?? '__none__' } : {};
+      user.role === 'EMPLOYEE' ? { employeeId: user.employeeId ?? NO_MATCH_ID } : {};
 
     const now = new Date();
     const expiringHorizon = new Date(now.getTime() + 30 * 86400000);

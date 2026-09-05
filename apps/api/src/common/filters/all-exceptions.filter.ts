@@ -27,6 +27,9 @@ export class AllExceptionsFilter implements ExceptionFilter {
     let status = HttpStatus.INTERNAL_SERVER_ERROR;
     let message: string | string[] = 'Internal server error';
     let error: string | undefined;
+    // Set for faults that are the server's problem even when the shaped status
+    // is a 4xx, so the cause still reaches the logs.
+    let logAsFault = false;
 
     if (exception instanceof HttpException) {
       status = exception.getStatus();
@@ -58,15 +61,18 @@ export class AllExceptionsFilter implements ExceptionFilter {
           break;
         default:
           status = HttpStatus.BAD_REQUEST;
-          message = 'Database request could not be completed.';
+          message = `Database request could not be completed (${exception.code}).`;
+          // An unmapped Prisma code is a bug here, not bad client input.
+          logAsFault = true;
       }
     } else if (exception instanceof Prisma.PrismaClientValidationError) {
       status = HttpStatus.BAD_REQUEST;
       message = 'Invalid data supplied.';
+      logAsFault = true;
     }
 
     // Log the full error server-side; the client only sees the shaped message.
-    if (status >= HttpStatus.INTERNAL_SERVER_ERROR) {
+    if (status >= HttpStatus.INTERNAL_SERVER_ERROR || logAsFault) {
       this.logger.error(
         `${request.method} ${request.url} -> ${status}`,
         exception instanceof Error ? exception.stack : String(exception)

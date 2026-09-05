@@ -20,6 +20,7 @@ import {
   UpdateAttendanceDto,
   QueryAttendanceDto,
 } from './dto/attendance.dto';
+import { NO_MATCH_ID } from '../../common/scoping';
 
 /** Minutes after the scheduled start before an arrival counts as late. */
 const LATE_GRACE_MINUTES = 15;
@@ -127,7 +128,7 @@ export class AttendanceService {
 
   async findAll(query: QueryAttendanceDto, user: AuthenticatedUser): Promise<AttendanceDto[]> {
     const scoped =
-      user.role === 'EMPLOYEE' ? { employeeId: user.employeeId ?? '__none__' } : {};
+      user.role === 'EMPLOYEE' ? { employeeId: user.employeeId ?? NO_MATCH_ID } : {};
 
     const now = new Date();
     const from = query.from

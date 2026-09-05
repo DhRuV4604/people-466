@@ -4,6 +4,7 @@ import type { EmployeeSummaryDto, EmployeeDetailDto } from '@peoplepay360/shared
 import { PrismaService } from '../../prisma/prisma.service';
 import type { AuthenticatedUser } from '../auth/auth.types';
 import { CreateEmployeeDto, UpdateEmployeeDto, QueryEmployeesDto } from './dto/employee.dto';
+import { NO_MATCH_ID } from '../../common/scoping';
 
 const SUMMARY_INCLUDE = {
   department: true,
@@ -45,7 +46,7 @@ export class EmployeesService {
 
   async findAll(query: QueryEmployeesDto, user: AuthenticatedUser): Promise<EmployeeSummaryDto[]> {
     // An employee may only ever see their own record.
-    const scoped = user.role === 'EMPLOYEE' ? { id: user.employeeId ?? '__none__' } : {};
+    const scoped = user.role === 'EMPLOYEE' ? { id: user.employeeId ?? NO_MATCH_ID } : {};
 
     const where: Prisma.EmployeeWhereInput = {
       ...scoped,
