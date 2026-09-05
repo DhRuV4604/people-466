@@ -113,6 +113,16 @@ export interface EmployeeSummaryDto {
   hireDate: ISODate;
 }
 
+/**
+ * The minimum a form needs to offer employees as options. Kept separate from
+ * the summary so a dropdown does not pull the whole row and its relations.
+ */
+export interface EmployeeOptionDto {
+  id: string;
+  fullName: string;
+  employeeCode: string;
+}
+
 export interface EmployeeDetailDto extends EmployeeSummaryDto {
   workPhone: string | null;
   dateOfBirth: ISODate | null;

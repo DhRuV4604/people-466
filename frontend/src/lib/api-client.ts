@@ -42,6 +42,20 @@ type RequestOptions = {
   anonymous?: boolean;
   /** Return null instead of throwing when the API responds 404. */
   nullOn404?: boolean;
+  /**
+   * Bearer token supplied by the caller instead of read from the cookie store.
+   *
+   * `cookies()` may only be called in request scope, so anything running inside
+   * `unstable_cache` has to be handed its token rather than reading one.
+   */
+  token?: string | null;
+  /**
+   * Passed through to fetch. Defaults to "no-store": most calls are per-request
+   * data behind a session. Reference lists override it.
+   */
+  cache?: RequestCache;
+  /** Seconds before a cached response is refetched. Implies a cache mode. */
+  revalidate?: number;
 };
 
 function buildUrl(path: string, query?: RequestOptions["query"]): string {
@@ -83,13 +97,22 @@ export async function apiFetch<T>(
   path: string,
   options: RequestOptions = {},
 ): Promise<T> {
-  const { method = "GET", body, query, anonymous, nullOn404 } = options;
+  const {
+    method = "GET",
+    body,
+    query,
+    anonymous,
+    nullOn404,
+    token: explicitToken,
+    cache,
+    revalidate,
+  } = options;
 
   const headers: Record<string, string> = { Accept: "application/json" };
   if (body !== undefined) headers["Content-Type"] = "application/json";
 
   if (!anonymous) {
-    const token = await getToken();
+    const token = explicitToken !== undefined ? explicitToken : await getToken();
     if (token) headers.Authorization = `Bearer ${token}`;
   }
 
@@ -99,7 +122,9 @@ export async function apiFetch<T>(
       method,
       headers,
       body: body === undefined ? undefined : JSON.stringify(body),
-      cache: "no-store",
+      ...(revalidate !== undefined
+        ? { next: { revalidate } }
+        : { cache: cache ?? "no-store" }),
     });
   } catch {
     // The API being down is an expected condition in local development, so it

@@ -28,6 +28,15 @@ export class EmployeesController {
     return this.employees.findAll(query, user);
   }
 
+  // Declared before `:id` so the literal path wins; Nest matches in order and
+  // would otherwise read "options" as an employee id.
+  @Get('options')
+  @RequirePermission('employees', 'read')
+  @ApiOperation({ summary: 'Id and label pairs for form dropdowns' })
+  findOptions(@CurrentUser() user: AuthenticatedUser) {
+    return this.employees.findOptions(user);
+  }
+
   @Get(':id')
   @RequirePermission('employees', 'read')
   findOne(@Param('id', ParseEntityIdPipe) id: string, @CurrentUser() user: AuthenticatedUser) {

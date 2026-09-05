@@ -1,9 +1,10 @@
 import "server-only";
 
-import { revalidatePath } from "next/cache";
+import { revalidatePath, revalidateTag } from "next/cache";
 
 import { ApiError, apiFetch } from "@/lib/api-client";
 import { readForm, type FieldSpec, type FieldValues } from "@/lib/fields";
+import { REF_TAGS } from "@/lib/refs";
 
 /**
  * The one shape every mutation returns, so `useActionState` looks the same on
@@ -32,13 +33,37 @@ export type ResourceConfig = {
 };
 
 /**
- * Server actions bypass the client router cache, so a write has to say what to
- * re-render. Every screen here reads live data behind a session cookie and
- * nothing is statically cached, which makes revalidating the whole tree both
- * correct and cheaper to maintain than a per-resource path list.
+ * Which reference list a write invalidates, keyed by the API collection it was
+ * written to. Anything not listed here has no cached list of its own.
  */
-function revalidateAll() {
+const PATH_REF_TAGS: { prefix: string; tag: string }[] = [
+  { prefix: "/employees", tag: REF_TAGS.employees },
+  { prefix: "/departments", tag: REF_TAGS.departments },
+  { prefix: "/job-positions", tag: REF_TAGS.positions },
+  { prefix: "/working-schedules", tag: REF_TAGS.schedules },
+  { prefix: "/salary-structures", tag: REF_TAGS.structures },
+  { prefix: "/time-off/types", tag: REF_TAGS.timeOffTypes },
+];
+
+/**
+ * Server actions bypass the client router cache, so a write has to say what to
+ * re-render.
+ *
+ * Page data is per-request and uncached, so the route tree still has to be
+ * revalidated wholesale. The reference lists are the part that *is* cached, and
+ * they are dropped by tag so a write to one collection does not discard the
+ * other five.
+ */
+function revalidateAll(path?: string) {
   revalidatePath("/", "layout");
+
+  if (!path) return;
+  for (const { prefix, tag } of PATH_REF_TAGS) {
+    if (path === prefix || path.startsWith(`${prefix}/`)) {
+      // Next 16 requires a cache profile; "minutes" matches the ref list TTL.
+      revalidateTag(tag, "minutes");
+    }
+  }
 }
 
 /**
@@ -97,7 +122,7 @@ export async function saveRecord(
       id ? `${config.path}/${id}` : config.path,
       { method: id ? "PATCH" : "POST", body: { ...values, ...extra } },
     );
-    revalidateAll();
+    revalidateAll(config.path);
     return {
       ok: true,
       id: record?.id ?? id,
@@ -124,7 +149,7 @@ export async function deleteRecord(
     const result = await apiFetch<
       { deleted?: boolean; archived?: boolean } | undefined
     >(`${config.path}/${id}`, { method: "DELETE" });
-    revalidateAll();
+    revalidateAll(config.path);
 
     const archived = result?.archived === true || result?.deleted === false;
     return {
@@ -159,7 +184,7 @@ export async function callAction<T = unknown>(options: {
       method: options.method ?? "POST",
       body: options.body,
     });
-    revalidateAll();
+    revalidateAll(options.path);
     return {
       ok: true,
       message:
