@@ -51,6 +51,17 @@ export class AttendanceController {
     });
   }
 
+  // Declared above the ":id" route below, which would otherwise swallow the
+  // literal path as a record id.
+  @Get('punch-status')
+  @RequirePermission('attendance', 'read')
+  @ApiOperation({
+    summary: "How many of today's check-ins the signed-in employee has left",
+  })
+  punchStatus(@CurrentUser() user: AuthenticatedUser) {
+    return this.attendance.punchStatusFor(user);
+  }
+
   @Post('check-in')
   @RequirePermission('attendance', 'create')
   @ApiOperation({ summary: 'Open an attendance entry for the signed-in employee' })

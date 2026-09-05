@@ -16,7 +16,7 @@ import {
   ValidateNested,
 } from 'class-validator';
 import { Type } from 'class-transformer';
-import { ROLES, SCHEDULE_TYPES } from '@peoplepay360/shared';
+import { MAX_CHECK_INS_PER_DAY, ROLES, SCHEDULE_TYPES } from '@peoplepay360/shared';
 import type { Role, ScheduleType } from '@peoplepay360/shared';
 import { IsEntityId } from '../../../common/validation/entity-id';
 
@@ -159,4 +159,28 @@ export class UpdateUserDto {
   @IsOptional()
   @IsBoolean()
   active?: boolean;
+}
+
+/**
+ * Both fields are optional so a caller can change one without restating the
+ * other; the service merges onto the row that is already there.
+ */
+export class UpdateAppSettingsDto {
+  @ApiPropertyOptional({
+    minimum: 1,
+    maximum: MAX_CHECK_INS_PER_DAY,
+    default: 1,
+    description: 'How many times an employee may check in on one calendar day',
+  })
+  @IsOptional()
+  @Type(() => Number)
+  @IsInt()
+  @Min(1, { message: 'At least one check-in a day must be allowed.' })
+  @Max(MAX_CHECK_INS_PER_DAY)
+  maxCheckInsPerDay?: number;
+
+  @ApiPropertyOptional({ default: true })
+  @IsOptional()
+  @IsBoolean()
+  warnOnCheckOut?: boolean;
 }

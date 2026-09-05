@@ -57,6 +57,9 @@ async function main() {
   await prisma.jobPosition.deleteMany();
   await prisma.department.deleteMany();
   await prisma.user.deleteMany();
+  // Policy is a singleton rather than a collection, so a re-seed puts it back
+  // to the documented defaults instead of carrying an edited cap forward.
+  await prisma.appSettings.deleteMany();
 
   // ---------------------------------------------------------------- Schedules
   console.log('Creating working schedules...');

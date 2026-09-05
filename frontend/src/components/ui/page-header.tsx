@@ -7,9 +7,13 @@ import { ArrowLeft } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 /**
- * A link back up one level, sitting above the page title. Breadcrumbs say
- * where you are; this is the one-click way out, and it names the destination
- * rather than saying "Back".
+ * A link back to a specific earlier state, sitting above the page title.
+ *
+ * Not for leaving a detail screen: the breadcrumb trail in the top bar already
+ * names every level above the current one, and a second control pointing at
+ * the same place is noise. Reserve this for somewhere the trail cannot
+ * express — a wizard step carrying the answers already given, say — and name
+ * the destination rather than saying "Back".
  */
 function BackLink({
   href,
@@ -40,7 +44,7 @@ type PageHeaderProps = {
   description?: string;
   /** Buttons and other controls, right-aligned on wide screens. */
   actions?: React.ReactNode;
-  /** Rendered above the title, typically a BackLink. */
+  /** Rendered above the title. */
   above?: React.ReactNode;
   className?: string;
 };

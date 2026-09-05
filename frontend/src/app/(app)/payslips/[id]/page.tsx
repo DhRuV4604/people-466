@@ -13,7 +13,8 @@ import {
 } from "@/components/data/primitives";
 import { StatusBadge } from "@/components/data/status-badge";
 import { ActionButton } from "@/components/form";
-import { BackLink, PageHeader } from "@/components/ui";
+import { BreadcrumbTitle } from "@/components/app/breadcrumb-title";
+import { PageHeader } from "@/components/ui";
 import { ApiError, apiFetch } from "@/lib/api-client";
 import { dateRange, hours, money } from "@/lib/format";
 import { requireAccess } from "@/lib/access";
@@ -59,8 +60,11 @@ export default async function PayslipPage({ params }: PageProps) {
 
   return (
     <>
+      {/* The number is the stable identifier, so it names the crumb even when
+          the payslip has an employee to show in the heading. */}
+      <BreadcrumbTitle>{payslip.number}</BreadcrumbTitle>
+
       <PageHeader
-        above={<BackLink href="/payslips">All payslips</BackLink>}
         title={payslip.employee?.fullName ?? payslip.number}
         description={`${payslip.number} · ${dateRange(payslip.periodStart, payslip.periodEnd)}`}
         actions={

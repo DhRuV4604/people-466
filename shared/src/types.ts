@@ -94,6 +94,43 @@ export interface WorkingScheduleDto {
   contractCount?: number;
 }
 
+// ------------------------------------------------------- Organisation policy
+
+/**
+ * Settings that apply across the organisation rather than to one record. The
+ * API is the enforcement point; the web app reads the same shape so a screen
+ * can say up front what the rule is instead of only reporting it as an error.
+ */
+export interface AppSettingsDto {
+  /** How many times an employee may check in on one calendar day. */
+  maxCheckInsPerDay: number;
+  /** Whether the self-service punch card confirms before closing a shift. */
+  warnOnCheckOut: boolean;
+}
+
+/** What an install behaves like before anyone edits the policy. */
+export const DEFAULT_APP_SETTINGS: AppSettingsDto = {
+  maxCheckInsPerDay: 1,
+  warnOnCheckOut: true,
+};
+
+/** The largest number of daily check-ins the policy will accept. */
+export const MAX_CHECK_INS_PER_DAY = 12;
+
+/**
+ * Where the signed-in employee stands against the daily cap. An open shift
+ * counts as used, so closing it never buys another check-in.
+ */
+export interface PunchStatusDto {
+  /** Check-ins already opened today, closed or not. */
+  used: number;
+  /** The cap in force, from the policy. */
+  allowed: number;
+  remaining: number;
+  /** Whether the punch card should confirm before closing a shift. */
+  warnOnCheckOut: boolean;
+}
+
 // ---------------------------------------------------------------- Employees
 
 export interface EmployeeSummaryDto {

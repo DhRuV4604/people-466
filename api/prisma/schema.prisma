@@ -655,3 +655,24 @@ model Notification {
   @@index([userId, readAt])
   @@index([userId, createdAt])
 }
+
+/// Organisation-wide settings that are not reference data: a single row the
+/// API reads on the paths that enforce them. Kept as one pinned row rather
+/// than a key/value table so each setting keeps its own column type, and the
+/// defaults below are what an install behaves like before anyone edits it.
+model AppSettings {
+  /// Always SINGLETON_ID; the column exists only so the row has a primary key.
+  id String @id @default("singleton")
+
+  /// How many times an employee may check in on one calendar day. 1 makes the
+  /// punch card a once-a-day control, which is the default an install starts
+  /// on; a higher number allows split shifts.
+  maxCheckInsPerDay Int @default(1)
+
+  /// Whether the self-service punch card confirms before closing a shift. It
+  /// matters when the day's punches are capped, because checking out may be
+  /// the last one available.
+  warnOnCheckOut Boolean @default(true)
+
+  updatedAt DateTime @updatedAt
+}

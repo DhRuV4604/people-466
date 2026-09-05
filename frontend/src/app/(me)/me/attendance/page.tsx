@@ -4,7 +4,9 @@ import type {
   AttendanceDto,
   AttendanceSummaryDto,
   Paginated,
+  PunchStatusDto,
 } from "@peoplepay360/shared";
+import { DEFAULT_APP_SETTINGS } from "@peoplepay360/shared";
 
 import { EmptyState } from "@/components/data/primitives";
 import { StatusBadge } from "@/components/data/status-badge";
@@ -42,7 +44,7 @@ export default async function MeAttendance() {
   const month = thisMonth();
   const query = { employeeId: user.employeeId, from: month.from, to: month.to };
 
-  const [rowPage, summary] = await Promise.all([
+  const [rowPage, summary, punches] = await Promise.all([
     soft(
       apiFetch<Paginated<AttendanceDto>>("/attendance", {
         query: { ...query, pageSize: ALL_ROWS },
@@ -50,6 +52,13 @@ export default async function MeAttendance() {
       emptyPage<AttendanceDto>(),
     ),
     soft(apiFetch<AttendanceSummaryDto | null>("/attendance/summary", { query }), null),
+    // The day's cap, so the card can say what is left before it is tapped.
+    soft(apiFetch<PunchStatusDto>("/attendance/punch-status"), {
+      used: 0,
+      allowed: DEFAULT_APP_SETTINGS.maxCheckInsPerDay,
+      remaining: 0,
+      warnOnCheckOut: DEFAULT_APP_SETTINGS.warnOnCheckOut,
+    }),
   ]);
 
   const rows = rowPage.items;
@@ -64,7 +73,11 @@ export default async function MeAttendance() {
     <>
       <h1 className="sr-only">Attendance</h1>
 
-      <PunchCard open={open ? { checkIn: open.checkIn } : null} workedToday={workedToday} />
+      <PunchCard
+        open={open ? { checkIn: open.checkIn } : null}
+        workedToday={workedToday}
+        punches={punches}
+      />
 
       <section aria-labelledby="month">
         <h2 id="month" className="mb-2 text-sm font-medium text-muted-foreground">

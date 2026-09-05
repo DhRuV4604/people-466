@@ -9,6 +9,7 @@ import {
   Query,
 } from '@nestjs/common';
 import { ApiBearerAuth, ApiOperation, ApiTags } from '@nestjs/swagger';
+import { AppSettingsService } from './app-settings.service';
 import { ConfigDataService } from './config-data.service';
 import {
   UpsertScheduleDto,
@@ -16,6 +17,7 @@ import {
   UpsertPositionDto,
   CreateUserDto,
   UpdateUserDto,
+  UpdateAppSettingsDto,
 } from './dto/config.dto';
 import { RequirePermission, CurrentUser } from '../../common/decorators';
 import type { AuthenticatedUser } from '../auth/auth.types';
@@ -26,7 +28,10 @@ import { PaginationQueryDto } from '../../common/pagination';
 @ApiBearerAuth()
 @Controller()
 export class ConfigDataController {
-  constructor(private readonly config: ConfigDataService) {}
+  constructor(
+    private readonly config: ConfigDataService,
+    private readonly settings: AppSettingsService,
+  ) {}
 
   // ---------------------------------------------------------------- Schedules
 
@@ -111,6 +116,25 @@ export class ConfigDataController {
   @RequirePermission('employees', 'delete')
   removePosition(@Param('id', ParseEntityIdPipe) id: string) {
     return this.config.removePosition(id);
+  }
+
+  // ------------------------------------------------------------ App settings
+  // Organisation policy sits behind the schedules permission: it is the same
+  // "how work is counted" configuration, and the roles that may edit one are
+  // the roles that may edit the other.
+
+  @Get('app-settings')
+  @RequirePermission('workingSchedules', 'read')
+  @ApiOperation({ summary: 'Organisation-wide policy, with defaults when unset' })
+  getAppSettings() {
+    return this.settings.get();
+  }
+
+  @Patch('app-settings')
+  @RequirePermission('workingSchedules', 'update')
+  @ApiOperation({ summary: 'Change policy; an omitted field keeps its stored value' })
+  updateAppSettings(@Body() dto: UpdateAppSettingsDto) {
+    return this.settings.update(dto);
   }
 
   // ---------------------------------------------------------------- Users

@@ -3,6 +3,7 @@
 import * as React from "react";
 import { usePathname } from "next/navigation";
 
+import { useBreadcrumbTitle } from "@/components/app/breadcrumb-title";
 import {
   Breadcrumb,
   BreadcrumbItem,
@@ -28,8 +29,9 @@ const LABELS: Record<string, string> = {
 };
 
 /**
- * Record ids are opaque cuids, so a detail crumb names the kind of thing and
- * the page heading carries the real name.
+ * Record ids are opaque cuids, so a detail crumb falls back to naming the kind
+ * of thing. A page that knows the record replaces this with its real name by
+ * rendering BreadcrumbTitle.
  */
 const DETAIL_LABELS: Record<string, string> = {
   employees: "Employee",
@@ -58,6 +60,9 @@ export function AppBreadcrumbs({
 }) {
   const pathname = usePathname();
   const segments = pathname.split("/").filter(Boolean);
+  // A detail page names its own crumb; every other page publishes nothing and
+  // the segment label stands.
+  const title = useBreadcrumbTitle();
 
   const crumbs = [
     // The overview is the root, so it leads the trail everywhere else and is
@@ -65,11 +70,15 @@ export function AppBreadcrumbs({
     ...(hasOverview
       ? [{ label: "Overview", href: "/", isLast: segments.length === 0 }]
       : []),
-    ...segments.map((segment, index) => ({
-      label: labelFor(segment, segments[index - 1]),
-      href: `/${segments.slice(0, index + 1).join("/")}`,
-      isLast: index === segments.length - 1,
-    })),
+    ...segments.map((segment, index) => {
+      const isLast = index === segments.length - 1;
+      return {
+        label:
+          isLast && title ? title : labelFor(segment, segments[index - 1]),
+        href: `/${segments.slice(0, index + 1).join("/")}`,
+        isLast,
+      };
+    }),
   ];
 
   return (

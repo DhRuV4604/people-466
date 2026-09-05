@@ -5,10 +5,11 @@ import type {
   LeaveBalanceDto,
   LeaveRequestDto,
   PayslipDto,
+  PunchStatusDto,
   TimeOffTypeDto,
   Paginated,
 } from "@peoplepay360/shared";
-import { can } from "@peoplepay360/shared";
+import { DEFAULT_APP_SETTINGS, can } from "@peoplepay360/shared";
 
 import { StatusBadge } from "@/components/data/status-badge";
 import { RecordDialog } from "@/components/form";
@@ -39,40 +40,49 @@ export default async function MeHome() {
   const month = thisMonth();
   const canSeePay = can(user.role, "payslips", "read");
 
-  const [attendancePage, balances, requestPage, typePage, payslipPage] = await Promise.all([
-    soft(
-      apiFetch<Paginated<AttendanceDto>>("/attendance", {
-        query: {
-          employeeId: user.employeeId,
-          from: month.from,
-          to: month.to,
-          pageSize: 100,
-        },
+  const [attendancePage, punches, balances, requestPage, typePage, payslipPage] =
+    await Promise.all([
+      soft(
+        apiFetch<Paginated<AttendanceDto>>("/attendance", {
+          query: {
+            employeeId: user.employeeId,
+            from: month.from,
+            to: month.to,
+            pageSize: 100,
+          },
+        }),
+        emptyPage(),
+      ),
+      // Where they stand against the day's cap. A role the endpoint refuses
+      // falls back to a spent day, which only ever hides the button.
+      soft(apiFetch<PunchStatusDto>("/attendance/punch-status"), {
+        used: 0,
+        allowed: DEFAULT_APP_SETTINGS.maxCheckInsPerDay,
+        remaining: 0,
+        warnOnCheckOut: DEFAULT_APP_SETTINGS.warnOnCheckOut,
       }),
-      emptyPage(),
-    ),
-    soft(apiFetch<LeaveBalanceDto[]>(`/time-off/balances/${user.employeeId}`), []),
-    soft(
-      apiFetch<Paginated<LeaveRequestDto>>("/time-off/requests", {
-        query: { employeeId: user.employeeId, pageSize: 50 },
-      }),
-      emptyPage(),
-    ),
-    soft(
-      apiFetch<Paginated<TimeOffTypeDto>>("/time-off/types", {
-        query: { pageSize: 100 },
-      }),
-      emptyPage(),
-    ),
-    canSeePay
-      ? soft(
-          apiFetch<Paginated<PayslipDto>>("/payslips", {
-            query: { employeeId: user.employeeId, pageSize: 1 },
-          }),
-          emptyPage(),
-        )
-      : Promise.resolve(emptyPage<PayslipDto>()),
-  ]);
+      soft(apiFetch<LeaveBalanceDto[]>(`/time-off/balances/${user.employeeId}`), []),
+      soft(
+        apiFetch<Paginated<LeaveRequestDto>>("/time-off/requests", {
+          query: { employeeId: user.employeeId, pageSize: 50 },
+        }),
+        emptyPage(),
+      ),
+      soft(
+        apiFetch<Paginated<TimeOffTypeDto>>("/time-off/types", {
+          query: { pageSize: 100 },
+        }),
+        emptyPage(),
+      ),
+      canSeePay
+        ? soft(
+            apiFetch<Paginated<PayslipDto>>("/payslips", {
+              query: { employeeId: user.employeeId, pageSize: 1 },
+            }),
+            emptyPage(),
+          )
+        : Promise.resolve(emptyPage<PayslipDto>()),
+    ]);
 
   const attendance = attendancePage.items;
   const requests = requestPage.items;
@@ -110,6 +120,7 @@ export default async function MeHome() {
       <PunchCard
         open={open ? { checkIn: open.checkIn } : null}
         workedToday={workedToday}
+        punches={punches}
       />
 
       {/* Balances scroll sideways on a phone rather than stacking: five tiles
