@@ -1,5 +1,12 @@
 import Link from "next/link";
-import { Banknote, Building2, CalendarDays, Mail, UserRound } from "lucide-react";
+import {
+  Banknote,
+  Building2,
+  CalendarDays,
+  Mail,
+  Send,
+  UserRound,
+} from "lucide-react";
 import type { EmployeeSummaryDto } from "@peoplepay360/shared";
 
 import { RowActions } from "@/components/form";
@@ -11,7 +18,7 @@ import {
   formatDate,
 } from "@/lib/format";
 
-import { deleteEmployee } from "../actions";
+import { deleteEmployee, reinviteEmployee } from "../actions";
 
 type ViewProps = {
   employees: EmployeeSummaryDto[];
@@ -20,6 +27,8 @@ type ViewProps = {
    * employee is loaded and no field can be blanked by accident.
    */
   canDelete?: boolean;
+  /** Adds "Send sign-in invite". Separate: it is an update, not a delete. */
+  canInvite?: boolean;
 };
 
 /** Warns that payroll cannot pay this person yet. */
@@ -45,26 +54,61 @@ function StatusBadge({ employee }: { employee: EmployeeSummaryDto }) {
   );
 }
 
-function DeleteMenu({ employee }: { employee: EmployeeSummaryDto }) {
+function RowMenu({
+  employee,
+  canDelete,
+  canInvite,
+}: {
+  employee: EmployeeSummaryDto;
+  canDelete?: boolean;
+  canInvite?: boolean;
+}) {
   return (
     <div className="relative z-10 shrink-0">
       <RowActions
-        remove={{
-          action: deleteEmployee.bind(null, employee.id),
-          title: `Delete ${employee.fullName}?`,
-          // The list DTO carries no payslip count, so the copy has to cover
-          // both outcomes: the API archives rather than deletes once payroll
-          // history exists.
-          description:
-            "This removes the employee and everything filed under them: contracts, attendance and time off. Someone who already has payslips is marked inactive instead, so payroll history survives.",
-        }}
+        items={
+          canInvite
+            ? [
+                {
+                  label: "Send invite",
+                  icon: <Send />,
+                  action: reinviteEmployee.bind(null, employee.id),
+                  confirm: {
+                    title: `Send ${employee.fullName} a sign-in invite?`,
+                    // Said plainly because it is not obvious that inviting
+                    // someone invalidates the password they may already use.
+                    description:
+                      "This emails them a new one-time password and asks them to choose their own. Any password they already have stops working.",
+                    confirmLabel: "Send invite",
+                  },
+                },
+              ]
+            : []
+        }
+        remove={
+          canDelete
+            ? {
+                action: deleteEmployee.bind(null, employee.id),
+                title: `Delete ${employee.fullName}?`,
+                // The list DTO carries no payslip count, so the copy has to
+                // cover both outcomes: the API archives rather than deletes
+                // once payroll history exists.
+                description:
+                  "This removes the employee and everything filed under them: contracts, attendance and time off. Someone who already has payslips is marked inactive instead, so payroll history survives.",
+              }
+            : undefined
+        }
       />
     </div>
   );
 }
 
 /** Dense rows. Best for scanning many people and comparing one column. */
-export function EmployeeList({ employees, canDelete }: ViewProps) {
+export function EmployeeList({
+  employees,
+  canDelete,
+  canInvite,
+}: ViewProps) {
   return (
     <ul className="divide-y divide-border overflow-hidden rounded-xl border border-border bg-card">
       {employees.map((employee) => (
@@ -107,7 +151,11 @@ export function EmployeeList({ employees, canDelete }: ViewProps) {
 
           <StatusBadge employee={employee} />
 
-          {canDelete ? <DeleteMenu employee={employee} /> : null}
+          <RowMenu
+            employee={employee}
+            canDelete={canDelete}
+            canInvite={canInvite}
+          />
         </li>
       ))}
     </ul>
@@ -115,7 +163,11 @@ export function EmployeeList({ employees, canDelete }: ViewProps) {
 }
 
 /** Cards. Best for browsing, and for seeing each person as a person. */
-export function EmployeeCards({ employees, canDelete }: ViewProps) {
+export function EmployeeCards({
+  employees,
+  canDelete,
+  canInvite,
+}: ViewProps) {
   return (
     <ul className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
       {employees.map((employee) => (
@@ -143,7 +195,11 @@ export function EmployeeCards({ employees, canDelete }: ViewProps) {
                   </p>
                 </div>
                 <StatusBadge employee={employee} />
-                {canDelete ? <DeleteMenu employee={employee} /> : null}
+                <RowMenu
+                  employee={employee}
+                  canDelete={canDelete}
+                  canInvite={canInvite}
+                />
               </div>
 
               <dl className="flex flex-col gap-2 text-xs text-muted-foreground">

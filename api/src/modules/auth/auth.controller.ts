@@ -1,7 +1,7 @@
 import { Body, Controller, Get, HttpCode, HttpStatus, Post } from '@nestjs/common';
 import { ApiBearerAuth, ApiOperation, ApiTags } from '@nestjs/swagger';
 import { AuthService } from './auth.service';
-import { LoginDto } from './dto/login.dto';
+import { LoginDto, ChangePasswordDto } from './dto/login.dto';
 import { Public, CurrentUser } from '../../common/decorators';
 import type { AuthenticatedUser } from './auth.types';
 
@@ -23,5 +23,16 @@ export class AuthController {
   @ApiOperation({ summary: 'Return the signed-in user with current role' })
   me(@CurrentUser() user: AuthenticatedUser) {
     return this.auth.me(user);
+  }
+
+  @Post('change-password')
+  @HttpCode(HttpStatus.OK)
+  @ApiBearerAuth()
+  @ApiOperation({ summary: 'Replace the password on the signed-in account' })
+  changePassword(
+    @CurrentUser() user: AuthenticatedUser,
+    @Body() dto: ChangePasswordDto
+  ) {
+    return this.auth.changePassword(user, dto);
   }
 }

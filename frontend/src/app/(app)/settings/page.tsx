@@ -37,38 +37,25 @@ import {
   deleteDepartment,
   deletePosition,
   deleteSchedule,
-  deleteUser,
   saveAttendancePolicy,
   saveDepartment,
   savePosition,
   saveSchedule,
-  saveUser,
 } from "./actions";
 import {
   attendancePolicyFields,
   departmentFields,
   positionFields,
   scheduleFields,
-  userFields,
 } from "./fields";
 
 export const metadata: Metadata = {
   title: "Settings",
   description:
-    "Departments, positions, schedules, attendance policy and platform users.",
+    "Departments, positions, schedules and the attendance policy.",
 };
 
 type SearchParams = Promise<Record<string, string | undefined>>;
-
-type UserRow = {
-  id: string;
-  name: string;
-  email: string;
-  role: Role;
-  active: boolean;
-  employeeId: string | null;
-  employeeName: string | null;
-};
 
 /** Not every role may read every list here, so each call fails soft. */
 async function soft<T>(promise: Promise<T>, fallback: T): Promise<T> {
@@ -87,11 +74,10 @@ export default async function SettingsPage({
 }) {
   const session = await requireAccess("workingSchedules");
   const params = await searchParams;
-  const canReadUsers = can(session.role, "users", "read");
 
   // Four independent tables on one screen, so each carries its own page in the
   // URL and paging one leaves the others where they were.
-  const [deptPage, posPage, schedulePage, userPage, policy, refs] =
+  const [deptPage, posPage, schedulePage, policy, refs] =
     await Promise.all([
       soft(
         apiFetch<Paginated<DepartmentDto>>("/departments", {
@@ -111,14 +97,6 @@ export default async function SettingsPage({
         }),
         emptyPage<WorkingScheduleDto>(),
       ),
-      canReadUsers
-        ? soft(
-            apiFetch<Paginated<UserRow>>("/users", {
-              query: pageQuery(params, "user"),
-            }),
-            emptyPage<UserRow>(),
-          )
-        : Promise.resolve(emptyPage<UserRow>()),
       // The API answers with the defaults when the row has never been saved,
       // so the tab shows the rule actually in force either way.
       soft(apiFetch<AppSettingsDto>("/app-settings"), {
@@ -130,7 +108,6 @@ export default async function SettingsPage({
   const departments = deptPage.items;
   const positions = posPage.items;
   const schedules = schedulePage.items;
-  const users = userPage.items;
 
   // Departments and positions are employee reference data: the API guards
   // those routes with the employees module, not the one this page sits behind.
@@ -149,9 +126,6 @@ export default async function SettingsPage({
   // the other.
   const canUpdatePolicy = canUpdateSchedule;
 
-  const canCreateUser = can(session.role, "users", "create");
-  const canUpdateUser = can(session.role, "users", "update");
-  const canDeleteUser = can(session.role, "users", "delete");
 
   const departmentActions: Column<DepartmentDto>[] = canManageReference
     ? [
@@ -245,44 +219,6 @@ export default async function SettingsPage({
       ]
     : [];
 
-  const userActions: Column<UserRow>[] =
-    canUpdateUser || canDeleteUser
-      ? [
-          {
-            align: "right",
-            className: "w-10",
-            cell: (row) => (
-              <RowActions
-                edit={
-                  canUpdateUser
-                    ? {
-                        title: "Edit user",
-                        description:
-                          "The password is not shown, and is left as it is unless the user resets it.",
-                        fields: userFields(refs),
-                        action: saveUser,
-                        record: row,
-                      }
-                    : undefined
-                }
-                remove={
-                  // The API refuses to delete the account making the request,
-                  // so the option is not offered on your own row.
-                  canDeleteUser && row.id !== session.id
-                    ? {
-                        action: deleteUser.bind(null, row.id),
-                        title: `Delete ${row.name}?`,
-                        description:
-                          "They lose access immediately, and any employee record linked to them is unlinked. This cannot be undone.",
-                      }
-                    : undefined
-                }
-              />
-            ),
-          },
-        ]
-      : [];
-
   // Which tab a link opens on. Switching afterwards is the tab's own state.
   // "Users" is the one tab a role may not be allowed to see at all, so a link
   // pointing at it falls back rather than opening an empty panel.
@@ -293,9 +229,7 @@ export default async function SettingsPage({
         ? "schedules"
         : params.tab === "attendance"
           ? "attendance"
-          : params.tab === "users" && canReadUsers
-            ? "users"
-            : "departments";
+          : "departments";
 
   return (
     <Tabs defaultValue={tab} className="w-full">
@@ -304,7 +238,6 @@ export default async function SettingsPage({
         <TabsTrigger value="positions">Job positions</TabsTrigger>
         <TabsTrigger value="schedules">Schedules</TabsTrigger>
         <TabsTrigger value="attendance">Attendance</TabsTrigger>
-        {canReadUsers ? <TabsTrigger value="users">Users</TabsTrigger> : null}
       </TabsList>
 
       <TabsContents className="mt-4">
@@ -529,77 +462,6 @@ export default async function SettingsPage({
           </Section>
         </TabsContent>
 
-        {canReadUsers ? (
-          <TabsContent value="users">
-            <Section
-              title="Platform users"
-              description="Who can sign in, and what their role lets them do. Roles are enforced by the API on every request."
-              action={
-                canCreateUser ? (
-                  <RecordDialog
-                    title="New user"
-                    description="They can sign in as soon as this is saved, so set the role to what they should actually see."
-                    fields={userFields(refs)}
-                    action={saveUser}
-                    submitLabel="Create user"
-                    record={{ active: true }}
-                  />
-                ) : null
-              }
-            >
-              {users.length === 0 ? (
-                <p className="text-sm text-muted-foreground">No users found.</p>
-              ) : (
-                <DataTable
-                  rows={users}
-                  getKey={(row) => row.id}
-                  columns={[
-                    {
-                      header: "User",
-                      className: "min-w-[200px]",
-                      cell: (row) => (
-                        <>
-                          <span className="block font-medium">{row.name}</span>
-                          <span className="block truncate text-xs text-muted-foreground">
-                            {row.email}
-                          </span>
-                        </>
-                      ),
-                    },
-                    {
-                      header: "Role",
-                      cell: (row) => (
-                        <Badge variant="secondary">
-                          {ROLE_LABELS[row.role]}
-                        </Badge>
-                      ),
-                    },
-                    {
-                      header: "Employee record",
-                      hideBelow: "md",
-                      cell: (row) => (
-                        <span className="text-muted-foreground">
-                          {row.employeeName ?? "Not linked"}
-                        </span>
-                      ),
-                    },
-                    {
-                      header: "Status",
-                      align: "right",
-                      cell: (row) => (
-                        <StatusBadge
-                          value={row.active ? "ACTIVE" : "INACTIVE"}
-                        />
-                      ),
-                    },
-                    ...userActions,
-                  ]}
-                />
-              )}
-              <Pagination meta={userPage} noun="user" param="user" />
-            </Section>
-          </TabsContent>
-        ) : null}
       </TabsContents>
     </Tabs>
   );

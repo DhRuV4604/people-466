@@ -136,30 +136,4 @@ export class ConfigDataController {
   updateAppSettings(@Body() dto: UpdateAppSettingsDto) {
     return this.settings.update(dto);
   }
-
-  // ---------------------------------------------------------------- Users
-
-  @Get('users')
-  @RequirePermission('users', 'read')
-  findUsers(@Query() query: PaginationQueryDto) {
-    return this.config.findUsers(query);
-  }
-
-  @Post('users')
-  @RequirePermission('users', 'create')
-  createUser(@Body() dto: CreateUserDto) {
-    return this.config.createUser(dto);
-  }
-
-  @Patch('users/:id')
-  @RequirePermission('users', 'update')
-  updateUser(@Param('id', ParseEntityIdPipe) id: string, @Body() dto: UpdateUserDto) {
-    return this.config.updateUser(id, dto);
-  }
-
-  @Delete('users/:id')
-  @RequirePermission('users', 'delete')
-  removeUser(@Param('id', ParseEntityIdPipe) id: string, @CurrentUser() user: AuthenticatedUser) {
-    return this.config.removeUser(id, user);
-  }
 }

@@ -11,6 +11,9 @@ import { getSession } from "@/lib/session";
 /** The self-service space. Anyone with an employee record can open it. */
 export const ME = "/me";
 
+/** Where someone still on an issued password has to go first. */
+export const CHANGE_PASSWORD = "/change-password";
+
 /**
  * The first screen a role can actually open. Employees is readable by every
  * role, so it is the safe landing place when someone reaches a page their role
@@ -50,6 +53,7 @@ export function hasMe(user: AuthUser): boolean {
 export async function requireMe(): Promise<AuthUser & { employeeId: string }> {
   const user = await getSession();
   if (!user) redirect("/login");
+  if (user.mustChangePassword) redirect(CHANGE_PASSWORD);
   if (!user.employeeId) redirect(landingFor(user));
   return user as AuthUser & { employeeId: string };
 }
@@ -65,6 +69,9 @@ export async function requireMe(): Promise<AuthUser & { employeeId: string }> {
 export async function requireAccess(module: Module): Promise<AuthUser> {
   const user = await getSession();
   if (!user) redirect("/login");
+  // An issued password is a credential someone else has seen. Nothing else in
+  // the app opens until it has been replaced.
+  if (user.mustChangePassword) redirect(CHANGE_PASSWORD);
   if (!can(user.role, module, "read")) redirect(landingFor(user));
   return user;
 }
@@ -73,5 +80,6 @@ export async function requireAccess(module: Module): Promise<AuthUser> {
 export async function requireSession(): Promise<AuthUser> {
   const user = await getSession();
   if (!user) redirect("/login");
+  if (user.mustChangePassword) redirect(CHANGE_PASSWORD);
   return user;
 }

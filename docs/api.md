@@ -77,9 +77,18 @@ boundary. Dates cross as ISO strings.
 |---|---|---|
 | `POST` | `/auth/login` | public |
 | `GET` | `/auth/me` | signed in |
+| `POST` | `/auth/change-password` | signed in |
 
 `login` returns `{ accessToken, user }`. `me` returns the current `AuthUser`, and is how the web
 client re-checks a role that an admin may have changed.
+
+Both carry `mustChangePassword`. It is true while the password in use is one the system issued,
+and every guarded page redirects to `/change-password` until it is false — an issued password
+gets someone in and no further.
+
+`change-password` takes `{ currentPassword, newPassword }`. It verifies the current password,
+refuses a new one identical to it, and clears the flag. The confirmation field is a browser
+concern and is not sent.
 
 ### Health
 
@@ -99,10 +108,24 @@ the API has finished migrating.
 | `POST` | `/employees` | `employees:create` |
 | `PATCH` | `/employees/:id` | `employees:update` |
 | `DELETE` | `/employees/:id` | `employees:delete` |
+| `POST` | `/employees/:id/reinvite` | `employees:update` |
 
 Query: `q`, `departmentId`, `employeeType`, `status`, `missingBank`.
 The list returns `EmployeeSummaryDto`; the single record returns `EmployeeDetailDto`, which adds
 the personal, bank and relation-id fields plus related-record counts.
+
+`POST /employees` also creates the sign-in account, in one transaction with the employee — there
+is no separate step and no way to end up with one without the other. It generates a one-time
+password, mails it, and records the attempt in the outbox with the password masked. `canSignIn:
+false` creates the account inactive and sends nothing.
+
+`reinvite` issues a fresh one-time password, mails it and reactivates the account. It is the way
+back for anyone whose account has no usable password — including the accounts the identity
+migration created for employees that predated it. It returns `{ delivered, error? }` rather than
+throwing, so a send that fails still leaves a usable account and a row saying why.
+
+`DELETE` removes the account with the employee. Where payslips exist, both are deactivated
+instead, so payroll history keeps the person it belongs to.
 
 ### Contracts
 
@@ -240,11 +263,6 @@ evaluated.
 | `POST` | `/working-schedules` | `workingSchedules:create` |
 | `PATCH` | `/working-schedules/:id` | `workingSchedules:update` |
 | `DELETE` | `/working-schedules/:id` | `workingSchedules:delete` |
-| `GET` | `/users` | `users:read` |
-| `POST` | `/users` | `users:create` |
-| `PATCH` | `/users/:id` | `users:update` |
-| `DELETE` | `/users/:id` | `users:delete` |
-
 A schedule is written with its `lines` — the weekly `{ dayOfWeek, startTime, endTime,
 breakHours }` pattern. `hoursPerWeek` is always derived from those lines and is never accepted
 from a client.

@@ -20,7 +20,6 @@ export type Module =
   | 'salaryStructures'
   | 'salaryRules'
   | 'dashboard'
-  | 'users'
   | 'auditLogs';
 
 export type Action = 'read' | 'create' | 'update' | 'delete' | 'approve';
@@ -51,7 +50,6 @@ const employeeMatrix: RoleMatrix = {
   salaryStructures: NONE,
   salaryRules: NONE,
   dashboard: NONE,
-  users: NONE,
   // The trail records what everyone did, so only an admin may read it.
   auditLogs: NONE,
 };
@@ -71,7 +69,6 @@ const hrManagerMatrix: RoleMatrix = {
   salaryStructures: NONE,
   salaryRules: NONE,
   dashboard: NONE,
-  users: NONE,
   // The trail records what everyone did, so only an admin may read it.
   auditLogs: NONE,
 };
@@ -106,7 +103,6 @@ const adminMatrix: RoleMatrix = {
   salaryStructures: FULL,
   salaryRules: FULL,
   dashboard: FULL,
-  users: FULL,
   // Read only, for everyone including the admin: a trail that can be edited or
   // pruned by the people it records is not a trail.
   auditLogs: READ,

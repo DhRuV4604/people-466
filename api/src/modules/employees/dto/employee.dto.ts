@@ -13,8 +13,8 @@ import {
 } from 'class-validator';
 import { Transform, Type } from 'class-transformer';
 import { IsEntityId } from '../../../common/validation/entity-id';
-import { EMPLOYEE_TYPES, EMPLOYEE_STATUSES } from '@peoplepay360/shared';
-import type { EmployeeType, EmployeeStatus } from '@peoplepay360/shared';
+import { EMPLOYEE_TYPES, EMPLOYEE_STATUSES, ROLES } from '@peoplepay360/shared';
+import type { EmployeeType, EmployeeStatus, Role } from '@peoplepay360/shared';
 import { PaginationQueryDto } from '../../../common/pagination';
 
 export class CreateEmployeeDto {
@@ -102,6 +102,23 @@ export class CreateEmployeeDto {
   @IsOptional()
   @IsEntityId()
   workingScheduleId?: string | null;
+
+  @ApiPropertyOptional({
+    enum: ROLES,
+    default: 'EMPLOYEE',
+    description: 'What this person may do. Everyone gets a sign-in; this decides its reach.',
+  })
+  @IsOptional()
+  @IsEnum(ROLES as unknown as object)
+  role?: Role;
+
+  @ApiPropertyOptional({
+    default: true,
+    description: 'Whether the account is usable. Off creates the person without inviting them.',
+  })
+  @IsOptional()
+  @IsBoolean()
+  canSignIn?: boolean;
 }
 
 export class UpdateEmployeeDto extends PartialType(CreateEmployeeDto) {}

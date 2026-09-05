@@ -10,7 +10,7 @@ import {
   SidebarTrigger,
   ThemeTogglerButton,
 } from "@/components/ui";
-import { landingFor } from "@/lib/access";
+import { CHANGE_PASSWORD, landingFor } from "@/lib/access";
 import { getSession } from "@/lib/session";
 
 /**
@@ -30,6 +30,9 @@ export default async function AppLayout({
 }) {
   const user = await getSession();
   if (!user) redirect("/login");
+  // An issued password is a credential someone else has seen, so the shell
+  // does not render until it has been replaced.
+  if (user.mustChangePassword) redirect(CHANGE_PASSWORD);
 
   // Not every role can open the overview, so the wordmark and the trail both
   // start from the first screen this one can.

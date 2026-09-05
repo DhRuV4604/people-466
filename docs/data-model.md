@@ -10,7 +10,7 @@ describes and the rules the services enforce on top of it.
                       ┌──────────────┐
                       │     User     │  sign-in + role
                       └──────┬───────┘
-                             │ 0..1
+                             │ 1..1
                       ┌──────▼───────┐
       Department ────►│   Employee   │◄──── JobPosition
                       └──────┬───────┘
@@ -27,11 +27,17 @@ describes and the rules the services enforce on top of it.
 
 **The employee record is the hub.** Everything daily hangs off it, and payroll reads through it.
 
-- A `User` is a sign-in with a role; it may or may not be linked to an `Employee`. An admin
-  account usually is not, which is why the check-in buttons do not appear for it.
+- A `User` is a sign-in with a role, and it always has exactly one `Employee`. One person is one
+  record and one account, never one without the other: creating an employee creates the account
+  in the same transaction, and an admin is an employee like everyone else. There is nothing to
+  link, so nothing can drift out of sync.
+- `mustChangePassword` marks an account still on a password the system issued. `invitedAt`
+  records when the invite carrying it actually went out; it stays null when the send failed, so
+  "was this person ever asked to sign in" has an honest answer.
 - An `Employee` may manage other employees — `manager` is a self-relation.
-- Deleting an employee cascades to attendance, allocations, requests and contracts. Payslips do
-  not cascade, which is why the API archives instead of deleting once payroll history exists.
+- Deleting an employee cascades to attendance, allocations, requests and contracts, and takes
+  the account with it. Payslips do not cascade, which is why the API deactivates both instead of
+  deleting once payroll history exists.
 
 ## Ids, money and time
 
@@ -200,3 +206,13 @@ npm run db:studio     # browse
 The seed is deliberately imperfect so the warning paths are demonstrable: two employees have no
 bank details, several attendance records are missing a check-out or were manually corrected, and
 some contracts expire within 30 days.
+
+`20260905170408_one_identity_per_person` is hand-written rather than generated, because making
+`Employee.userId` required on a database that already holds payroll history is not a change
+Prisma can make on its own. It backfills in both directions before adding the constraint: an
+account for every employee that lacked one, and an employee for every account that lacked one,
+continuing the existing `EMP####` sequence rather than restarting it. Nothing is deleted.
+
+The accounts it creates are inactive and carry a bcrypt digest of a value nobody holds, so the
+migration cannot hand anyone a way in as a side effect. `POST /employees/:id/reinvite` is how
+they are brought online.

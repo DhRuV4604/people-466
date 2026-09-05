@@ -69,6 +69,7 @@ export default async function EmployeesPage({
 
   const canCreate = can(session.role, "employees", "create");
   const canDelete = can(session.role, "employees", "delete");
+  const canInvite = can(session.role, "employees", "update");
   const hasFilters = Boolean(
     params.q || params.department || params.status || params.type || missingBank,
   );
@@ -128,9 +129,17 @@ export default async function EmployeesPage({
           }
         />
       ) : view === "list" ? (
-        <EmployeeList employees={employees} canDelete={canDelete} />
+        <EmployeeList
+          employees={employees}
+          canDelete={canDelete}
+          canInvite={canInvite}
+        />
       ) : (
-        <EmployeeCards employees={employees} canDelete={canDelete} />
+        <EmployeeCards
+          employees={employees}
+          canDelete={canDelete}
+          canInvite={canInvite}
+        />
       )}
 
       <Pagination meta={employeePage} noun="employee" />

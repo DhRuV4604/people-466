@@ -485,8 +485,24 @@ async function main() {
     const monthsAgo = randInt(0, 11);
     const hireDate = new Date(today.getFullYear() - yearsAgo, today.getMonth() - monthsAgo, randInt(1, 28));
 
+    // One person, one record and one sign-in. The account is created with the
+    // employee rather than linked afterwards, because there is no such thing
+    // here as an employee who cannot sign in.
+    const account = await prisma.user.create({
+      data: {
+        email,
+        name: `${p.first} ${p.last}`,
+        passwordHash: password,
+        role: p.role ?? 'EMPLOYEE',
+        // Seeded accounts are handed out with a known password on purpose, so
+        // they are not treated as freshly invited.
+        mustChangePassword: false,
+      },
+    });
+
     const employee = await prisma.employee.create({
       data: {
+        userId: account.id,
         employeeCode: code,
         firstName: p.first,
         lastName: p.last,
@@ -518,22 +534,6 @@ async function main() {
     });
 
     if (p.isManager) managerByDept[p.dept.name] = employee.id;
-
-    // Give a few employees a login so every role is demonstrable.
-    if (p.role) {
-      const user = await prisma.user.create({
-        data: {
-          email,
-          name: `${p.first} ${p.last}`,
-          passwordHash: password,
-          role: p.role,
-        },
-      });
-      await prisma.employee.update({
-        where: { id: employee.id },
-        data: { userId: user.id },
-      });
-    }
 
     // ---- Contracts: an expired historical one plus the current running one.
     const structureId = p.type === 'INTERN' ? internStructure.id : regularStructure.id;
@@ -599,48 +599,117 @@ async function main() {
   }
 
   // ---------------------------------------------------------------- Platform users
-  console.log('Creating platform users...');
+  console.log('Creating platform accounts...');
 
-  await prisma.user.create({
-    data: {
+  // These are people, not service accounts. Everyone who can sign in has an
+  // employee record, so an admin has a desk, a schedule and a payslip like
+  // anyone else, and nothing in the app has to handle a signed-in user with
+  // nobody behind them.
+  const staffAccounts: {
+    email: string;
+    first: string;
+    last: string;
+    role: string;
+    dept: { id: string; name: string };
+    position: string;
+  }[] = [
+    {
       email: 'admin@peoplepay360.com',
-      name: 'System Administrator',
-      passwordHash: password,
+      first: 'System',
+      last: 'Administrator',
       role: 'ADMIN',
+      dept: operations,
+      position: 'Operations Manager',
     },
-  });
-
-  await prisma.user.create({
-    data: {
+    {
       email: 'payroll@peoplepay360.com',
-      name: 'Payroll Manager',
-      passwordHash: password,
+      first: 'Payroll',
+      last: 'Manager',
       role: 'HR_PAYROLL_MANAGER',
+      dept: finance,
+      position: 'Payroll Officer',
     },
-  });
-
-  await prisma.user.create({
-    data: {
+    {
       email: 'hr@peoplepay360.com',
-      name: 'HR Manager',
-      passwordHash: password,
+      first: 'HR',
+      last: 'Manager',
       role: 'HR_MANAGER',
+      dept: hr,
+      position: 'HR Manager',
     },
-  });
+  ];
 
-  // Give the first employee a self-service login for the Employee role demo.
-  const firstEmployee = createdEmployees[2];
-  const employeeUser = await prisma.user.create({
-    data: {
-      email: 'employee@peoplepay360.com',
-      name: firstEmployee.name,
-      passwordHash: password,
-      role: 'EMPLOYEE',
-    },
+  let nextCode = people.length;
+  for (const a of staffAccounts) {
+    nextCode += 1;
+    const account = await prisma.user.create({
+      data: {
+        email: a.email,
+        name: `${a.first} ${a.last}`,
+        passwordHash: password,
+        role: a.role,
+        mustChangePassword: false,
+      },
+    });
+
+    const hireDate = new Date(today.getFullYear() - randInt(2, 6), randInt(0, 11), randInt(1, 28));
+
+    const employee = await prisma.employee.create({
+      data: {
+        userId: account.id,
+        employeeCode: `EMP${String(nextCode).padStart(4, '0')}`,
+        firstName: a.first,
+        lastName: a.last,
+        workEmail: a.email,
+        workPhone: `+91 ${randInt(70, 99)}${randInt(10000000, 99999999)}`,
+        bankName: 'HDFC Bank',
+        bankAccountNumber: String(randInt(100000000000, 999999999999)),
+        employeeType: 'FULL_TIME',
+        status: 'ACTIVE',
+        hireDate,
+        departmentId: a.dept.id,
+        jobPositionId: positions[a.position].id,
+        workingScheduleId: standardSchedule.id,
+      },
+    });
+
+    // A running contract, so they are payroll-eligible like everyone else
+    // rather than a person the engine has to make an exception for.
+    await prisma.contract.create({
+      data: {
+        name: `${a.first} ${a.last} — Current Contract`,
+        employeeId: employee.id,
+        dateStart: hireDate,
+        status: 'RUNNING',
+        wage: randInt(90000, 140000),
+        contractType: 'PERMANENT',
+        jobPositionId: positions[a.position].id,
+        workingScheduleId: standardSchedule.id,
+        salaryStructureId: regularStructure.id,
+      },
+    });
+
+    createdEmployees.push({
+      id: employee.id,
+      name: `${a.first} ${a.last}`,
+      dept: a.dept.name,
+      isManager: false,
+      type: 'FULL_TIME',
+      scheduleId: standardSchedule.id,
+      wage: 100000,
+    });
+  }
+
+  // The Employee-role demo account is one of the seeded staff, promoted to a
+  // memorable address rather than given a second identity.
+  const demo = createdEmployees[2];
+  await prisma.user.update({
+    where: { id: (await prisma.employee.findUniqueOrThrow({ where: { id: demo.id } })).userId },
+    data: { email: 'employee@peoplepay360.com' },
   });
   await prisma.employee.update({
-    where: { id: firstEmployee.id },
-    data: { userId: employeeUser.id },
+    where: { id: demo.id },
+    data: { workEmail: 'employee@peoplepay360.com' },
   });
 
   // ---------------------------------------------------------------- Attendance

@@ -124,17 +124,22 @@ enum EmailStatus {
 // ---------------------------------------------------------------- Access control
 
 model User {
-  id            String         @id @default(cuid())
-  email         String         @unique
-  name          String
-  passwordHash  String
-  role          String // EMPLOYEE | HR_MANAGER | HR_PAYROLL_USER | HR_PAYROLL_MANAGER | ADMIN
-  active        Boolean        @default(true)
-  employee      Employee?
-  auditLogs     AuditLog[]
-  notifications Notification[]
-  createdAt     DateTime       @default(now())
-  updatedAt     DateTime       @updatedAt
+  id                 String         @id @default(cuid())
+  email              String         @unique
+  name               String
+  passwordHash       String
+  role               String // EMPLOYEE | HR_MANAGER | HR_PAYROLL_USER | HR_PAYROLL_MANAGER | ADMIN
+  active             Boolean        @default(true)
+  /// The issued password works once: the next sign-in has to replace it. Set
+  /// when an account is created and whenever an admin reissues one.
+  mustChangePassword Boolean        @default(true)
+  /// When the invite was emailed, so it is possible to see who never got one.
+  invitedAt          DateTime?
+  employee           Employee?
+  auditLogs          AuditLog[]
+  notifications      Notification[]
+  createdAt          DateTime       @default(now())
+  updatedAt          DateTime       @updatedAt
 }
 
 // ---------------------------------------------------------------- HR master data
@@ -189,8 +194,11 @@ model Employee {
   workingScheduleId String?
   workingSchedule   WorkingSchedule? @relation(fields: [workingScheduleId], references: [id])
 
-  userId String? @unique
-  user   User?   @relation(fields: [userId], references: [id])
+  /// Required: a person is one record here and one sign-in, never one without
+  /// the other. Creating an employee creates the account that goes with it,
+  /// and an admin is an employee like everyone else.
+  userId String @unique
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   contracts        Contract[]
   attendances      Attendance[]

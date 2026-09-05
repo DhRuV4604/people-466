@@ -157,6 +157,74 @@ export class MailService {
     return result;
   }
 
+  /**
+   * The invite that goes out when an account is created.
+   *
+   * Recorded in the same outbox as a payslip, so "was this person ever asked
+   * to sign in" has one place to look. A failure is not thrown: an employee
+   * that exists but whose invite bounced is a smaller problem than a create
+   * that half happened, and the row says what went wrong.
+   */
+  async sendInvite(params: {
+    to: string;
+    name: string;
+    password: string;
+    signInUrl: string;
+  }): Promise<{ delivered: boolean; error?: string }> {
+    const subject = 'Your PeoplePay360 account';
+    const body = [
+      `Hello ${params.name},`,
+      '',
+      'An account has been created for you on PeoplePay360, where you can check',
+      'in and out, request leave and read your payslips.',
+      '',
+      `Sign in at: ${params.signInUrl}`,
+      `Email:      ${params.to}`,
+      `Password:   ${params.password}`,
+      '',
+      'That password works once. You will be asked to choose your own as soon',
+      'as you sign in.',
+      '',
+      'If you were not expecting this, tell your HR team rather than signing in.',
+      '',
+      'Regards,',
+      'PeoplePay360',
+    ].join('\n');
+
+    const transport = this.transport();
+    let status: 'SENT' | 'FAILED' = 'SENT';
+    let error: string | null = null;
+
+    try {
+      if (transport === 'acs') {
+        await this.sendViaAcs({ to: params.to, name: params.name, subject, body });
+      } else if (transport === 'smtp') {
+        await this.sendViaSmtp({ to: params.to, subject, body });
+      }
+    } catch (err) {
+      status = 'FAILED';
+      error = err instanceof Error ? err.message : 'Unknown error';
+      this.logger.warn(`Invite to ${params.to} failed: ${error}`);
+    }
+
+    await this.prisma.emailLog
+      .create({
+        data: {
+          toEmail: params.to,
+          toName: params.name,
+          subject,
+          // The password is deliberately not stored: the outbox is readable by
+          // anyone with payslips:read, and a credential does not belong there.
+          body: body.replace(params.password, '********'),
+          status,
+          error,
+        },
+      })
+      .catch(() => undefined);
+
+    return { delivered: status === 'SENT', error: error ?? undefined };
+  }
+
   async findLogs(query: PaginationQueryDto = {}): Promise<Paginated<EmailLogDto>> {
     const { skip, take, page, pageSize } = pageArgs(query);
 
@@ -195,7 +263,8 @@ export class MailService {
     to: string;
     subject: string;
     body: string;
-    attachment: { filename: string; content: Buffer };
+    /** Absent for mail that carries nothing, such as an invite. */
+    attachment?: { filename: string; content: Buffer };
   }): Promise<void> {
     const nodemailer = await import('nodemailer' as string).catch(() => null);
     if (!nodemailer) {
@@ -218,9 +287,9 @@ export class MailService {
       to: params.to,
       subject: params.subject,
       text: params.body,
-      attachments: [
-        { filename: params.attachment.filename, content: params.attachment.content },
-      ],
+      attachments: params.attachment
+        ? [{ filename: params.attachment.filename, content: params.attachment.content }]
+        : undefined,
     });
   }
 
@@ -237,7 +306,8 @@ export class MailService {
     name: string;
     subject: string;
     body: string;
-    attachment: { filename: string; content: Buffer };
+    /** Absent for mail that carries nothing, such as an invite. */
+    attachment?: { filename: string; content: Buffer };
   }): Promise<void> {
     const senderAddress = this.config.get<string>('mail.acsSenderAddress')?.trim();
     if (!senderAddress) {
@@ -254,13 +324,15 @@ export class MailService {
       senderAddress,
       content: { subject: params.subject, plainText: params.body },
       recipients: { to: [{ address: params.to, displayName: params.name }] },
-      attachments: [
-        {
-          name: params.attachment.filename,
-          contentType: 'application/pdf',
-          contentInBase64: params.attachment.content.toString('base64'),
-        },
-      ],
+      attachments: params.attachment
+        ? [
+            {
+              name: params.attachment.filename,
+              contentType: 'application/pdf',
+              contentInBase64: params.attachment.content.toString('base64'),
+            },
+          ]
+        : undefined,
     });
 
     const result = await poller.pollUntilDone();

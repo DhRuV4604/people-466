@@ -127,7 +127,6 @@ const RESOURCE_MODELS: readonly (readonly [string, string])[] = [
   ['working-schedules', 'WorkingSchedule'],
   ['departments', 'Department'],
   ['job-positions', 'JobPosition'],
-  ['users', 'User'],
 ];
 
 /**

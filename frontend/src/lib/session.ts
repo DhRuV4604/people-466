@@ -74,3 +74,29 @@ export async function verifySession(): Promise<AuthUser | null> {
     throw error;
   }
 }
+
+/**
+ * Re-reads the account from the API and rewrites the cached cookie.
+ *
+ * Used after something changes about the account itself rather than about a
+ * record — changing a password clears `mustChangePassword`, and the cookie
+ * would otherwise keep sending the person back to change it again.
+ */
+export async function refreshSession(): Promise<AuthUser | null> {
+  const current = await verifySession();
+  if (!current) return null;
+
+  const store = await cookies();
+  const existing = store.get(SESSION_COOKIE);
+  if (!existing) return null;
+
+  store.set(USER_COOKIE, JSON.stringify(current), {
+    httpOnly: true,
+    sameSite: "lax" as const,
+    secure: process.env.NODE_ENV === "production",
+    path: "/",
+    maxAge: MAX_AGE,
+  });
+
+  return current;
+}

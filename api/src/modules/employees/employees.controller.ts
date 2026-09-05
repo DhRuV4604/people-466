@@ -49,6 +49,21 @@ export class EmployeesController {
     return this.employees.create(dto, user);
   }
 
+  /**
+   * Issues a fresh one-time password and mails it.
+   *
+   * Needs `update` rather than a permission of its own: it is a change to
+   * someone's account, and anyone trusted to edit an employee is trusted to
+   * ask them to sign in. It is also the only way back for the accounts the
+   * migration created without a usable password.
+   */
+  @Post(':id/reinvite')
+  @RequirePermission('employees', 'update')
+  @ApiOperation({ summary: 'Send a new one-time password to an employee' })
+  reinvite(@Param('id', ParseEntityIdPipe) id: string) {
+    return this.employees.reinvite(id);
+  }
+
   @Patch(':id')
   @RequirePermission('employees', 'update')
   update(

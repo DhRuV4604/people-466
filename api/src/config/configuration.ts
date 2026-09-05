@@ -8,6 +8,8 @@ export interface AppConfig {
     expiresIn: string;
   };
   corsOrigins: string[];
+  /** Where an invite tells a new colleague to sign in. */
+  signInUrl: string;
   mail: {
     acsConnectionString: string;
     acsSenderAddress: string;
@@ -39,6 +41,9 @@ export default (): AppConfig => {
       secret: jwtSecret || 'peoplepay360-development-secret-do-not-use-in-production',
       expiresIn: process.env.JWT_EXPIRES_IN ?? '7d',
     },
+    // The first CORS origin is where the browser loads the app from, which is
+    // exactly the address an invite has to send someone to.
+    signInUrl: `${(process.env.CORS_ORIGIN ?? 'http://localhost:3000').split(',')[0].trim()}/login`,
     corsOrigins: (process.env.CORS_ORIGIN ?? 'http://localhost:3000')
       .split(',')
       .map((o) => o.trim())

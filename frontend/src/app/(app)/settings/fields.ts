@@ -64,48 +64,6 @@ export function scheduleFields(): FieldSpec[] {
   ];
 }
 
-export function userFields(refs?: Partial<Refs>): FieldSpec[] {
-  return [
-    { name: "name", label: "Name", required: true },
-    {
-      name: "email",
-      label: "Email",
-      type: "email",
-      required: true,
-      placeholder: "name@company.com",
-      autoComplete: "off",
-    },
-    {
-      name: "role",
-      label: "Role",
-      type: "select",
-      required: true,
-      options: ROLE_OPTIONS,
-      hint: "What this login may see and do. The API enforces it on every request.",
-    },
-    {
-      // Update leaves the password alone when it is omitted, and a blank one
-      // would be a change nobody asked for, so it is only ever set on create.
-      name: "password",
-      label: "Password",
-      type: "password",
-      required: true,
-      createOnly: true,
-      autoComplete: "new-password",
-      hint: "At least 8 characters.",
-    },
-    {
-      name: "employeeId",
-      label: "Employee record",
-      type: "select",
-      options: refs?.employees,
-      clearable: true,
-      hint: "Links the login to a person, so they can see their own records.",
-    },
-    { name: "active", label: "Can sign in", type: "switch" },
-  ];
-}
-
 /**
  * Organisation policy rather than a record, so there is no id and no name: the
  * form edits the one row the API keeps.

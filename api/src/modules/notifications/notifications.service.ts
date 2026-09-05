@@ -130,10 +130,11 @@ export class NotificationsService {
     const ids = [...new Set(employeeIds)].filter(Boolean);
     if (ids.length === 0) return 0;
 
-    // An employee without a user account has nowhere to be notified.
+    // Every employee has an account, so the only question is whether it is
+    // still usable: a deactivated one has nowhere to be notified.
     const employees = await this.attempt(payload.type, () =>
       this.prisma.employee.findMany({
-        where: { id: { in: ids }, userId: { not: null }, user: { active: true } },
+        where: { id: { in: ids }, user: { active: true } },
         select: { userId: true },
       })
     );

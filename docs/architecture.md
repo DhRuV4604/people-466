@@ -75,11 +75,22 @@ Two cookies, both httpOnly, both set by the Next.js server after a successful lo
 | Cookie | Holds | Why |
 |---|---|---|
 | `pp360_token` | The JWT | Sent to the API as a bearer token. Never readable by scripts. |
-| `pp360_user` | Name, email, role, employee id | Renders the shell without a round trip on every navigation. |
+| `pp360_user` | Name, email, role, employee id, `mustChangePassword` | Renders the shell without a round trip on every navigation. |
 
 `getSession()` reads the cached identity for rendering. `verifySession()` asks the API instead,
 and is used where a stale role would matter — the profile page, for one, so a role an admin
-changed shows up immediately rather than at the next sign-in.
+changed shows up immediately rather than at the next sign-in. `refreshSession()` re-reads
+`/auth/me` and rewrites the cookie; it is what a password change calls, since the cached copy
+would otherwise still say the password must change and bounce them straight back.
+
+Every guard — `requireAccess`, `requireMe`, `requireSession` — redirects to `/change-password`
+while `mustChangePassword` is set. A one-time password gets someone as far as choosing their own
+and no further, and the check lives in the guards rather than in middleware so it cannot be
+missed by a route that forgot to opt in.
+
+Where a signed-in person lands is `landingFor(user)`: employees go to `/me`, everyone else to
+the admin panel. It is one function so login, the password change and the root route cannot
+disagree about it.
 
 The API re-checks the token against the database on every request, so deactivating an account
 takes effect at once rather than at token expiry.
@@ -130,6 +141,23 @@ body carrying unknown fields is rejected outright rather than stripped.
 | `app/(app)/<domain>/` | One folder per screen: `page.tsx`, `fields.ts`, `actions.ts`, `_components/`. |
 
 A screen composes; it does not define new primitives. See [frontend.md](frontend.md).
+
+## Pagination
+
+Every list endpoint takes `page` and `pageSize` and returns the same envelope:
+
+```ts
+type Paginated<T> = { items: T[]; total: number; page: number; pageSize: number }
+```
+
+`pageArgs()` clamps the request — 20 by default, 500 at most — and `paginated()` builds the
+reply, so a caller cannot ask for the whole table and no endpoint invents its own defaults. The
+rows and the count come from one `$transaction`, so a write between them cannot produce a total
+that disagrees with the page.
+
+Filtering and scoping happen in the same query. That matters more than the page size: the
+Employee role's own-records restriction is applied at the source, so a page of results never
+holds rows the browser then has to be trusted to hide.
 
 ## Ids
 

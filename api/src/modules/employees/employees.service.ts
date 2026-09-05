@@ -7,7 +7,11 @@ import type {
   EmployeeOptionDto,
   Paginated,
 } from '@peoplepay360/shared';
+import { ConfigService } from '@nestjs/config';
 import { PrismaService } from '../../prisma/prisma.service';
+import { generateOneTimePassword } from '../../common/one-time-password';
+import { AuthService } from '../auth/auth.service';
+import { MailService } from '../payroll/mail.service';
 import { pageArgs, paginated } from '../../common/pagination';
 import { NotificationsService } from '../notifications/notifications.service';
 import type { AuthenticatedUser } from '../auth/auth.types';
@@ -27,7 +31,9 @@ type EmployeeSummaryRow = Prisma.EmployeeGetPayload<{ include: typeof SUMMARY_IN
 export class EmployeesService {
   constructor(
     private readonly prisma: PrismaService,
-    private readonly notifications: NotificationsService
+    private readonly notifications: NotificationsService,
+    private readonly mail: MailService,
+    private readonly config: ConfigService
   ) {}
 
   private toSummary(e: EmployeeSummaryRow): EmployeeSummaryDto {
@@ -182,10 +188,53 @@ export class EmployeesService {
     return `EMP${String(n).padStart(4, '0')}`;
   }
 
+  /**
+   * Creates the person: their employee record and the sign-in that goes with
+   * it, in one transaction, followed by an emailed invite.
+   *
+   * There is no such thing here as an employee who cannot sign in, so the two
+   * are never created separately and never linked afterwards. The password is
+   * issued rather than chosen — nobody should be inventing a colleague's
+   * password — and works exactly once.
+   *
+   * The invite is sent after the transaction commits. A bounced invite leaves
+   * a real employee whose password can be reissued, which is a far smaller
+   * problem than a create rolled back because a mail server was down.
+   */
   async create(dto: CreateEmployeeDto, user: AuthenticatedUser): Promise<EmployeeDetailDto> {
-    const created = await this.prisma.employee.create({
+    const email = dto.workEmail.toLowerCase();
+
+    const taken = await this.prisma.user.findUnique({ where: { email } });
+    if (taken) {
+      throw new BadRequestException('That work email already has an account.');
+    }
+
+    const password = generateOneTimePassword();
+
+    const passwordHash = await AuthService.hashPassword(password);
+    const employeeCode = await this.nextEmployeeCode();
+
+    // One transaction: an employee without its sign-in, or a sign-in with
+    // nobody behind it, are both states the rest of the app now assumes cannot
+    // happen. Prisma will not take a nested create alongside the scalar
+    // foreign keys this record carries, so the account is written first and
+    // its id passed in.
+    const created = await this.prisma.$transaction(async (tx) => {
+      const account = await tx.user.create({
+        data: {
+          email,
+          name: `${dto.firstName} ${dto.lastName}`,
+          role: dto.role ?? 'EMPLOYEE',
+          active: dto.canSignIn ?? true,
+          passwordHash,
+          mustChangePassword: true,
+        },
+      });
+
+      return tx.employee.create({
       data: {
-        employeeCode: await this.nextEmployeeCode(),
+        userId: account.id,
+        employeeCode,
         firstName: dto.firstName,
         lastName: dto.lastName,
         workEmail: dto.workEmail.toLowerCase(),
@@ -203,7 +252,23 @@ export class EmployeesService {
         managerId: dto.managerId ?? null,
         workingScheduleId: dto.workingScheduleId ?? null,
       },
+      });
     });
+
+    if (dto.canSignIn ?? true) {
+      const invite = await this.mail.sendInvite({
+        to: email,
+        name: `${dto.firstName} ${dto.lastName}`,
+        password,
+        signInUrl: this.config.get<string>('signInUrl') ?? 'http://localhost:3000/login',
+      });
+      if (invite.delivered) {
+        await this.prisma.user.update({
+          where: { id: created.userId },
+          data: { invitedAt: new Date() },
+        });
+      }
+    }
 
     // Every role that can read an employee is told, except the Employee role:
     // it only ever sees itself, so a new colleague is not its news.
@@ -265,22 +330,94 @@ export class EmployeesService {
       },
     });
 
+    // The account carries the same name, address and reach, so anything that
+    // moved has to move on both. Renaming an employee and leaving their
+    // sign-in under the old name is how the two drift apart.
+    const account: Prisma.UserUpdateInput = {};
+    if (dto.firstName !== undefined || dto.lastName !== undefined) {
+      const after = await this.prisma.employee.findUniqueOrThrow({
+        where: { id },
+        select: { firstName: true, lastName: true },
+      });
+      account.name = `${after.firstName} ${after.lastName}`;
+    }
+    if (dto.workEmail !== undefined) account.email = dto.workEmail.toLowerCase();
+    if (dto.role !== undefined) account.role = dto.role;
+    if (dto.canSignIn !== undefined) account.active = dto.canSignIn;
+
+    if (Object.keys(account).length > 0) {
+      const { userId } = await this.prisma.employee.findUniqueOrThrow({
+        where: { id },
+        select: { userId: true },
+      });
+      await this.prisma.user.update({ where: { id: userId }, data: account });
+    }
+
     return this.findOne(id, user);
+  }
+
+  /**
+   * Reissues a one-time password and emails it again, for someone who never
+   * got the first invite or has locked themselves out.
+   */
+  async reinvite(id: string): Promise<{ delivered: boolean; error?: string }> {
+    const employee = await this.prisma.employee.findUniqueOrThrow({
+      where: { id },
+      select: { userId: true, firstName: true, lastName: true, workEmail: true },
+    });
+
+    const password = generateOneTimePassword();
+    await this.prisma.user.update({
+      where: { id: employee.userId },
+      data: {
+        passwordHash: await AuthService.hashPassword(password),
+        mustChangePassword: true,
+        active: true,
+      },
+    });
+
+    const invite = await this.mail.sendInvite({
+      to: employee.workEmail,
+      name: `${employee.firstName} ${employee.lastName}`,
+      password,
+      signInUrl: this.config.get<string>('signInUrl') ?? 'http://localhost:3000/login',
+    });
+
+    if (invite.delivered) {
+      await this.prisma.user.update({
+        where: { id: employee.userId },
+        data: { invitedAt: new Date() },
+      });
+    }
+
+    return invite;
   }
 
   async remove(id: string): Promise<{ deleted: boolean; archived: boolean }> {
     const payslipCount = await this.prisma.payslip.count({ where: { employeeId: id } });
 
     // Payroll history must not be destroyed; archive the employee instead.
+    // The sign-in goes with them either way: someone who has left should not
+    // still be able to open the app, archived record or not.
     if (payslipCount > 0) {
-      await this.prisma.employee.update({
+      const archived = await this.prisma.employee.update({
         where: { id },
         data: { status: 'INACTIVE', exitDate: new Date() },
+      });
+      await this.prisma.user.update({
+        where: { id: archived.userId },
+        data: { active: false },
       });
       return { deleted: false, archived: true };
     }
 
-    await this.prisma.employee.delete({ where: { id } });
+    // Deleting the account takes the employee with it: the relation cascades,
+    // so this is one delete rather than two that could half succeed.
+    const { userId } = await this.prisma.employee.findUniqueOrThrow({
+      where: { id },
+      select: { userId: true },
+    });
+    await this.prisma.user.delete({ where: { id: userId } });
     return { deleted: true, archived: false };
   }
 }

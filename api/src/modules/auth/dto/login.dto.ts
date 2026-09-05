@@ -11,3 +11,14 @@ export class LoginDto {
   @MinLength(1, { message: 'Password is required.' })
   password!: string;
 }
+
+export class ChangePasswordDto {
+  @ApiProperty({ description: 'The password currently in use, issued or chosen' })
+  @IsString()
+  currentPassword!: string;
+
+  @ApiProperty({ minLength: 8, description: 'The replacement' })
+  @IsString()
+  @MinLength(8, { message: 'A password must be at least 8 characters.' })
+  newPassword!: string;
+}

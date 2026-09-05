@@ -40,7 +40,6 @@ const MODULE_LABELS: Record<Module, string> = {
   salaryStructures: "Salary structures",
   salaryRules: "Salary rules",
   dashboard: "Dashboard",
-  users: "Users",
   auditLogs: "Audit trail",
 };
 

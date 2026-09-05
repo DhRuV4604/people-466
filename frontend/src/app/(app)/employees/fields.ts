@@ -1,4 +1,9 @@
-import { EMPLOYEE_STATUSES, EMPLOYEE_TYPES } from "@peoplepay360/shared";
+import {
+  EMPLOYEE_STATUSES,
+  EMPLOYEE_TYPES,
+  ROLES,
+  ROLE_LABELS,
+} from "@peoplepay360/shared";
 
 import type { FieldSpec, Refs } from "@/lib/fields";
 import { statusOptions } from "@/lib/status";
@@ -88,5 +93,22 @@ export function employeeFields(refs?: Partial<Refs>): FieldSpec[] {
     },
     { name: "exitDate", label: "Exit date", type: "date", clearable: true },
     { name: "address", label: "Address", type: "textarea", clearable: true },
+    {
+      // Creating an employee creates their sign-in, so the account's reach is
+      // part of the person rather than a separate screen.
+      name: "role",
+      label: "Role",
+      type: "select",
+      options: ROLES.map((role) => ({ value: role, label: ROLE_LABELS[role] })),
+      defaultValue: "EMPLOYEE",
+      hint: "What they can reach. Most people are an Employee.",
+    },
+    {
+      name: "canSignIn",
+      label: "Can sign in",
+      type: "switch",
+      defaultValue: true,
+      hint: "On sends an invite with a one-time password. Off records the person without one.",
+    },
   ];
 }

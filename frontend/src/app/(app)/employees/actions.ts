@@ -2,7 +2,12 @@
 
 import { redirect } from "next/navigation";
 
-import { deleteRecord, saveRecord, type FormState } from "@/lib/mutate";
+import {
+  callAction,
+  deleteRecord,
+  saveRecord,
+  type FormState,
+} from "@/lib/mutate";
 import { employeeFields } from "./fields";
 
 const EMPLOYEE = {
@@ -32,4 +37,21 @@ export async function deleteEmployeeAndReturn(id: string): Promise<FormState> {
   const state = await deleteRecord(EMPLOYEE, id);
   if (!state.ok) return state;
   redirect("/employees");
+}
+
+/**
+ * Issues a new one-time password and mails it.
+ *
+ * The confirmation says whether it actually left: the API records a failed
+ * invite rather than throwing, so a silent "sent" would be a lie on any
+ * install without mail configured.
+ */
+export async function reinviteEmployee(id: string): Promise<FormState> {
+  return callAction<{ delivered: boolean; error?: string }>({
+    path: `/employees/${id}/reinvite`,
+    message: (result) =>
+      result.delivered
+        ? "Invite sent. The new password works once."
+        : `A new password was set but the email did not send${result.error ? `: ${result.error}` : "."}`,
+  });
 }

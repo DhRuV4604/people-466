@@ -50,7 +50,16 @@ export interface AuthUser {
   email: string;
   name: string;
   role: Role;
+  /**
+   * Every account belongs to an employee, so this is only null for a session
+   * read before that was true.
+   */
   employeeId: string | null;
+  /**
+   * The password in use was issued rather than chosen. The client sends the
+   * person to change it before anything else.
+   */
+  mustChangePassword: boolean;
 }
 
 export interface LoginResponse {
