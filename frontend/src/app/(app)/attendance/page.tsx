@@ -1,6 +1,6 @@
 import type { Metadata } from "next";
 import { redirect } from "next/navigation";
-import { CalendarClock, LogIn, LogOut } from "lucide-react";
+import { CalendarClock } from "lucide-react";
 import {
   ATTENDANCE_STATUSES,
   can,
@@ -21,7 +21,7 @@ import {
   StatTile,
 } from "@/components/data/primitives";
 import { StatusBadge } from "@/components/data/status-badge";
-import { ActionButton, RecordDialog, RowActions } from "@/components/form";
+import { RecordDialog, RowActions } from "@/components/form";
 import { Badge } from "@/components/ui";
 import { apiFetch } from "@/lib/api-client";
 import {
@@ -38,8 +38,6 @@ import { requireAccess } from "@/lib/access";
 import { attendanceEditFields, attendanceFields } from "./fields";
 import { PERIOD_OPTIONS, attendancePeriod } from "./period";
 import {
-  checkIn,
-  checkOut,
   correctAttendance,
   deleteAttendance,
   saveAttendance,
@@ -150,10 +148,6 @@ export default async function AttendancePage({
   const canCreate = can(session.role, "attendance", "create");
   const canUpdate = can(session.role, "attendance", "update");
   const canDelete = can(session.role, "attendance", "delete");
-
-  // The punches record the signed-in user's own attendance, so an account with
-  // no employee behind it has nothing to punch.
-  const canPunch = canCreate && Boolean(session.employeeId);
 
   // The list DTO is the whole record, so an edit here cannot blank a column
   // the form never showed. Built once rather than per row, so the same list
@@ -280,32 +274,6 @@ export default async function AttendancePage({
           ) : null
         }
       />
-
-      {/* Punching your own clock is not a filter and not an admin correction,
-          so it sits on its own line under the bar rather than competing with
-          either. Right-aligned to stack under the button it belongs beside. */}
-      {canPunch ? (
-        <div className="flex flex-wrap items-center justify-end gap-3">
-          <ActionButton
-            action={checkIn}
-            variant="outline"
-            size="md"
-            startIcon={<LogIn />}
-            pendingLabel="Checking in"
-          >
-            Check in
-          </ActionButton>
-          <ActionButton
-            action={checkOut}
-            variant="outline"
-            size="md"
-            startIcon={<LogOut />}
-            pendingLabel="Checking out"
-          >
-            Check out
-          </ActionButton>
-        </div>
-      ) : null}
 
       {records.length === 0 ? (
         <EmptyState

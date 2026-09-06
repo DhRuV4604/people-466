@@ -28,7 +28,6 @@ import { ALL_ROWS, emptyPage } from "@/lib/paged";
 import { statusOptions } from "@/lib/status";
 import { requireAccess } from "@/lib/access";
 
-import { LeaveBalances, loadBalances } from "./_components/leave-balances";
 import {
   AllocationList,
   RequestList,
@@ -86,7 +85,7 @@ export default async function TimeOffPage({
 
   const params = await searchParams;
 
-  const [requestPage, allocationPage, typePage, refs, balances] = await Promise.all([
+  const [requestPage, allocationPage, typePage, refs] = await Promise.all([
     apiFetch<Paginated<LeaveRequestDto>>("/time-off/requests", {
       query: {
         ...pageQuery(params, "req"),
@@ -116,9 +115,6 @@ export default async function TimeOffPage({
       emptyPage<TimeOffTypeDto>(),
     ),
     loadRefs(["employees"]),
-    // Only an account tied to an employee record has a balance of its own; an
-    // admin who is not on the payroll has nothing to show.
-    session.employeeId ? loadBalances(session.employeeId) : null,
   ]);
 
   const requests = requestPage.items;
@@ -218,14 +214,6 @@ export default async function TimeOffPage({
           hint={`${types.length} defined`}
         />
       </StatGrid>
-
-      {balances ? (
-        <LeaveBalances
-          rows={balances}
-          title="Your balances"
-          description="What you have left to take, as things stand today."
-        />
-      ) : null}
 
       <Tabs defaultValue={tab} className="w-full">
         <TabsList>

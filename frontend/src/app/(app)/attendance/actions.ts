@@ -1,6 +1,6 @@
 "use server";
 
-import { callAction, deleteRecord, saveRecord, type FormState } from "@/lib/mutate";
+import { deleteRecord, saveRecord, type FormState } from "@/lib/mutate";
 import { attendanceEditFields, attendanceFields } from "./fields";
 
 const ATTENDANCE = {
@@ -29,17 +29,4 @@ export async function correctAttendance(
 
 export async function deleteAttendance(id: string): Promise<FormState> {
   return deleteRecord(ATTENDANCE, id);
-}
-
-/**
- * Both punches act on the signed-in user's own employee record and take no
- * body, so the API is the only thing that decides whether they are allowed:
- * a second check-in, or a check-out with nothing open, comes back as an error.
- */
-export async function checkIn(): Promise<FormState> {
-  return callAction({ path: "/attendance/check-in", message: "Checked in." });
-}
-
-export async function checkOut(): Promise<FormState> {
-  return callAction({ path: "/attendance/check-out", message: "Checked out." });
 }
