@@ -51,7 +51,10 @@ export default async function MeLayout({
 
   return (
     <div className="flex min-h-dvh flex-col bg-muted/30">
-      <header className="sticky top-0 z-20 border-b border-border bg-background/85 backdrop-blur-md">
+      {/* Padding rather than a taller bar: viewport-fit=cover puts the page
+          under the status bar, and only the inset moves the row down out from
+          behind it. It is 0 in an ordinary browser tab. */}
+      <header className="sticky top-0 z-20 border-b border-border bg-background/85 pt-[env(safe-area-inset-top)] backdrop-blur-md">
         <div className="mx-auto flex h-14 w-full max-w-2xl items-center gap-3 px-4 md:max-w-6xl md:px-6">
           <Link
             href="/me/profile"
@@ -100,7 +103,7 @@ export default async function MeLayout({
           home screen lays its cards out in a grid. It was max-w-2xl at every
           width: 672px of a 1920px monitor, a third of the screen, with a
           check-in button six hundred pixels wide. */}
-      <main className="mx-auto flex w-full max-w-2xl flex-1 flex-col gap-5 px-4 pt-5 pb-28 md:max-w-6xl md:gap-6 md:px-6 md:pt-6 md:pb-10">
+      <main className="mx-auto flex w-full max-w-2xl flex-1 flex-col gap-5 px-4 pt-5 pb-32 md:max-w-6xl md:gap-6 md:px-6 md:pt-6 md:pb-10">
         {children}
       </main>
 

@@ -1,9 +1,10 @@
-import type { Metadata } from "next";
+import type { Metadata, Viewport } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
 import "./globals.css";
 
 import { THEME_SCRIPT, ThemeProvider } from "@/components/ui/theme";
 import { ToastProvider } from "@/components/ui/toast";
+import { ServiceWorker } from "@/components/app/service-worker";
 
 const geistSans = Geist({
   variable: "--font-sans",
@@ -21,6 +22,31 @@ export const metadata: Metadata = {
     template: "%s · People",
   },
   description: "People — manage your team, together.",
+  // iOS does not read `display` from the manifest; these are what make an
+  // installed shortcut open without Safari's chrome around it.
+  appleWebApp: {
+    capable: true,
+    title: "People",
+    statusBarStyle: "default",
+  },
+};
+
+/**
+ * Declared here rather than left to the default so the status bar matches the
+ * app once it is installed, and so a phone in dark mode does not paint a white
+ * strip above a dark page.
+ */
+export const viewport: Viewport = {
+  width: "device-width",
+  initialScale: 1,
+  // Without this, env(safe-area-inset-*) reports 0 on every phone and the
+  // bottom bar sits under the home indicator once the app is installed. It
+  // costs the header a matching top inset, which the /me layout adds.
+  viewportFit: "cover",
+  themeColor: [
+    { media: "(prefers-color-scheme: light)", color: "#ffffff" },
+    { media: "(prefers-color-scheme: dark)", color: "#0a0a0a" },
+  ],
 };
 
 export default function RootLayout({ children }: LayoutProps<"/">) {
@@ -51,6 +77,8 @@ export default function RootLayout({ children }: LayoutProps<"/">) {
         <ThemeProvider>
           <ToastProvider>{children}</ToastProvider>
         </ThemeProvider>
+
+        <ServiceWorker />
       </body>
     </html>
   );

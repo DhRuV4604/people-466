@@ -7,7 +7,6 @@ import { CalendarOff, FileSignature, House, Wallet } from "lucide-react";
 
 import { AnimateIcon } from "@/components/animate-ui/icons/icon";
 import { Clock } from "@/components/animate-ui/icons/clock";
-import { UserRound } from "@/components/animate-ui/icons/user-round";
 
 import { cn } from "@/lib/utils";
 
@@ -17,8 +16,6 @@ type Item = {
   icon: React.ComponentType<{ className?: string }>;
   /** A grant this destination depends on. Absent means everyone gets it. */
   needs?: "pay";
-  /** Kept out of the header row, where something else already goes there. */
-  bottomOnly?: boolean;
 };
 
 const ITEMS: Item[] = [
@@ -27,10 +24,9 @@ const ITEMS: Item[] = [
   { href: "/me/attendance", label: "Time", icon: Clock },
   { href: "/me/pay", label: "Pay", icon: Wallet, needs: "pay" },
   { href: "/me/documents", label: "Docs", icon: FileSignature },
-  // "Me" is the bottom bar only. On a wider screen the avatar and name in the
-  // header are already a link to the same screen, sitting a few centimetres
-  // away — two doors to one room.
-  { href: "/me/profile", label: "Me", icon: UserRound, bottomOnly: true },
+  // No "Me" tab. The avatar and name in the header are a link to that screen
+  // on every size, so a tab for it was a second door to the same room — and on
+  // a phone it was the sixth item squeezing a 390px bar.
 ];
 
 /**
@@ -54,11 +50,7 @@ export function MeNav({
   const isActive = (href: string) =>
     href === "/me" ? pathname === "/me" : pathname.startsWith(href);
 
-  const items = ITEMS.filter(
-    (item) =>
-      (showPay || item.needs !== "pay") &&
-      (variant === "bottom" || !item.bottomOnly),
-  );
+  const items = ITEMS.filter((item) => showPay || item.needs !== "pay");
 
   if (variant === "top") {
     return (
@@ -92,10 +84,13 @@ export function MeNav({
 
   return (
     // env(safe-area-inset-bottom) keeps the bar clear of a phone's home
-    // indicator, which would otherwise sit on top of the labels.
+    // indicator, which would otherwise sit on top of the labels. The extra
+    // quarter-rem is for the places that inset reports 0 and something is
+    // there anyway — Chrome's own bottom bar — where the labels sat flush
+    // against it. A hair, deliberately: any more and the bar looks unmoored.
     <nav
       aria-label="Sections"
-      className="fixed inset-x-0 bottom-0 z-20 border-t border-border bg-background/90 pb-[env(safe-area-inset-bottom)] backdrop-blur-md md:hidden"
+      className="fixed inset-x-0 bottom-0 z-20 border-t border-border bg-background/90 pb-[calc(env(safe-area-inset-bottom)+0.25rem)] backdrop-blur-md md:hidden"
     >
       <ul
         className="mx-auto grid max-w-2xl"

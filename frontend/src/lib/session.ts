@@ -1,4 +1,4 @@
-import { cookies } from "next/headers";
+import { cookies, headers } from "next/headers";
 import type { AuthUser, LoginResponse } from "@peoplepay360/shared";
 
 import { ApiError, SESSION_COOKIE, apiFetch } from "@/lib/api-client";
@@ -15,6 +15,28 @@ const MAX_AGE = 60 * 60 * 24 * 7;
  * The API remains the authority on what that role may actually do.
  */
 
+/**
+ * Whether to mark the session cookies `secure`.
+ *
+ * Tied to how the request actually arrived, not to whether this is a
+ * production build. A `secure` cookie is never sent over plain HTTP, so
+ * keying it on NODE_ENV meant a production build served over http — a phone
+ * on the office wifi hitting the machine by IP — set a cookie the browser then
+ * refused to send back. Every navigation after signing in looked like being
+ * signed out.
+ *
+ * Behind a TLS-terminating proxy, which is how this is deployed, the header is
+ * set and the flag stays on. `COOKIE_SECURE` forces it either way for a
+ * deployment that terminates TLS itself and sets no header.
+ */
+async function isSecureRequest(): Promise<boolean> {
+  const override = process.env.COOKIE_SECURE;
+  if (override) return override === "true";
+
+  const forwarded = (await headers()).get("x-forwarded-proto");
+  return forwarded?.split(",")[0].trim() === "https";
+}
+
 export async function login(
   email: string,
   password: string,
@@ -26,11 +48,10 @@ export async function login(
   });
 
   const store = await cookies();
-  const secure = process.env.NODE_ENV === "production";
   const options = {
     httpOnly: true,
     sameSite: "lax" as const,
-    secure,
+    secure: await isSecureRequest(),
     path: "/",
     maxAge: MAX_AGE,
   };
@@ -93,7 +114,9 @@ export async function refreshSession(): Promise<AuthUser | null> {
   store.set(USER_COOKIE, JSON.stringify(current), {
     httpOnly: true,
     sameSite: "lax" as const,
-    secure: process.env.NODE_ENV === "production",
+    // Same rule as login: a refresh that re-marked the cookie `secure` over a
+    // plain-HTTP connection would sign the person out on their next click.
+    secure: await isSecureRequest(),
     path: "/",
     maxAge: MAX_AGE,
   });

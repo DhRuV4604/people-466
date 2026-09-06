@@ -44,7 +44,7 @@ export default async function AppLayout({
       {/* min-w-0 lets the inset shrink below its content width, so long rows
           truncate instead of pushing the page sideways. */}
       <SidebarInset className="min-w-0">
-        <header className="sticky top-0 z-10 flex h-16 shrink-0 items-center gap-3 border-b border-border bg-background/80 px-4 backdrop-blur-sm sm:px-6">
+        <header className="sticky top-0 z-10 flex h-16 shrink-0 items-center gap-3 border-b border-border bg-background/80 px-4 pt-[env(safe-area-inset-top)] backdrop-blur-sm sm:px-6">
           <SidebarTrigger className="-ml-1" />
           <AppBreadcrumbs hasOverview={home === "/"} />
           <Notifications />

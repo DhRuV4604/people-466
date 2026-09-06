@@ -28,7 +28,18 @@ export default async function MePay() {
     if (!(error instanceof ApiError)) throw error;
   }
 
-  const [latest, ...earlier] = [...payslips].sort((a, b) =>
+  // Only what has actually been issued.
+  //
+  // The query asked for every status, so a DRAFT or COMPUTED payslip for the
+  // month payroll is still working on sorted above the real one and rendered
+  // its provisional net pay as the biggest number on the screen, under the
+  // word "Latest". A figure that is going to change is worse than no figure:
+  // it is the number someone plans their month around.
+  const issued = payslips.filter(
+    (p) => p.status === "VALIDATED" || p.status === "PAID",
+  );
+
+  const [latest, ...earlier] = [...issued].sort((a, b) =>
     b.periodStart.localeCompare(a.periodStart),
   );
 

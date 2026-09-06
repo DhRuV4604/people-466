@@ -4,7 +4,6 @@ import * as React from "react";
 import Link from "next/link";
 
 import { AuroraHero } from "@/components/ui";
-import { Fade } from "@/components/animate-ui/primitives/effects/fade";
 import { Slide } from "@/components/animate-ui/primitives/effects/slide";
 import { BrandMark } from "@/components/ui/brand-mark";
 
@@ -15,7 +14,7 @@ import { BrandMark } from "@/components/ui/brand-mark";
  */
 export function AuthShell({ children }: { children: React.ReactNode }) {
   return (
-    <div className="flex h-dvh overflow-hidden">
+    <div className="flex h-dvh overflow-hidden pt-[env(safe-area-inset-top)] pb-[env(safe-area-inset-bottom)]">
       <div className="flex w-full flex-col overflow-hidden px-5 py-6 sm:px-10 sm:py-8 lg:w-1/2 lg:px-14 xl:px-20">
         <header>
           <Slide direction="down" offset={14} delay={60}>
@@ -33,21 +32,6 @@ export function AuthShell({ children }: { children: React.ReactNode }) {
           <div className="w-full max-w-[400px]">{children}</div>
         </main>
 
-        <footer className="flex flex-col items-center justify-between gap-2 text-xs text-muted-foreground sm:flex-row">
-          <Fade delay={800}>
-            <p>© {new Date().getFullYear()} People</p>
-          </Fade>
-          <Fade delay={850}>
-            <nav className="flex items-center gap-5">
-              <Link href="#" className="transition-colors hover:text-foreground">
-                Privacy
-              </Link>
-              <Link href="#" className="transition-colors hover:text-foreground">
-                Terms
-              </Link>
-            </nav>
-          </Fade>
-        </footer>
       </div>
 
       {/* Right: aurora panel. Decoration only, so it drops below lg. */}

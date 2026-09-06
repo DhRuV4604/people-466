@@ -17,7 +17,7 @@ import { ALL_ROWS, emptyPage } from "@/lib/paged";
 import { formatTime, hours } from "@/lib/format";
 
 import { PunchCard } from "../_components/punch-card";
-import { dayKey, openShift, shortDay, thisMonth, today } from "../_lib";
+import { dayKey, shortDay, thisMonth, today } from "../_lib";
 
 export const metadata: Metadata = { title: "Attendance" };
 
@@ -63,7 +63,6 @@ export default async function MeAttendance() {
   ]);
 
   const rows = rowPage.items;
-  const open = openShift(rows);
   const workedToday = rows
     .filter((r) => dayKey(r.checkIn) === today() && r.checkOut)
     .reduce((sum, r) => sum + r.workedHours, 0);
@@ -75,7 +74,15 @@ export default async function MeAttendance() {
       <h1 className="sr-only">Attendance</h1>
 
       <PunchCard
-        open={open ? { checkIn: open.checkIn } : null}
+        // From the status endpoint, not from `rows`: those are scoped to the
+        // month, and the API refuses a check-in while any shift is open of any
+        // date. A shift left open on 31 August is invisible to a September
+        // query, so the button offered "Check in" and the API refused it.
+        open={
+          punches.openCheckIn
+            ? { checkIn: punches.openCheckIn.checkIn }
+            : null
+        }
         workedToday={workedToday}
         punches={punches}
       />

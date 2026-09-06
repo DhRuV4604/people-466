@@ -11,6 +11,11 @@ import {
 import { toNumber } from '../../common/decimal';
 import { PdfService } from './pdf.service';
 import { CompanyService } from '../config/company.service';
+import {
+  inviteEmail,
+  payslipEmail,
+  type EmailContent,
+} from '../../common/email-template';
 
 export interface SendResult {
   sent: number;
@@ -21,10 +26,6 @@ export interface SendResult {
    * apart will tell someone their payslip is on its way when it is not.
    */
   queued: number;
-}
-
-function formatDate(date: Date): string {
-  return date.toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' });
 }
 
 /** How a message actually leaves, decided by what is configured. */
@@ -79,27 +80,18 @@ export class MailService {
   private static readonly NO_TRANSPORT =
     'No mail transport is configured, so nothing was delivered. Set ACS_EMAIL_CONNECTION_STRING and ACS_SENDER_ADDRESS, or SMTP_HOST, and send again.';
 
-  private buildBody(params: {
-    employeeName: string;
-    periodStart: Date;
-    periodEnd: Date;
-    netPay: number;
-    payslipNumber: string;
-    companyName: string;
-  }): string {
-    return [
-      `Dear ${params.employeeName},`,
-      '',
-      `Please find attached your payslip for the period ${formatDate(params.periodStart)} to ${formatDate(params.periodEnd)}.`,
-      '',
-      `Payslip Number: ${params.payslipNumber}`,
-      `Net Pay: ${params.netPay.toFixed(2)}`,
-      '',
-      'If any detail looks incorrect, please contact the payroll team.',
-      '',
-      'Regards,',
-      `Payroll Team - ${params.companyName}`,
-    ].join('\n');
+  /**
+   * Where in the app a payslip can be read.
+   *
+   * Derived from the sign-in URL rather than configured separately, so an
+   * install that has set CORS_ORIGIN gets a working button without a second
+   * setting to get wrong. Undefined when nothing is configured — a button
+   * pointing at localhost in someone's inbox is worse than no button.
+   */
+  private payUrl(): string | undefined {
+    const signIn = this.config.get<string>('signInUrl');
+    if (!signIn) return undefined;
+    return signIn.replace(/\/login\/?$/, '') + '/me/pay';
   }
 
   async sendPayrunPayslips(payrunId: string): Promise<SendResult> {
@@ -110,20 +102,27 @@ export class MailService {
     if (!payrun) throw new NotFoundException('Pay run not found.');
 
     const result: SendResult = { sent: 0, failed: 0, queued: 0 };
-    const companyName = (await this.company.get()).name;
+    // Read once rather than per payslip: it is the same row every time, and a
+    // pay run is a few hundred of these.
+    const company = await this.company.get();
+    const payUrl = this.payUrl();
 
     for (const payslip of payrun.payslips) {
       const employee = payslip.employee;
       const employeeName = `${employee.firstName} ${employee.lastName}`;
-      const subject = `Payslip ${payslip.number} - ${formatDate(payslip.periodStart)} to ${formatDate(payslip.periodEnd)}`;
-      const body = this.buildBody({
+      const mail = payslipEmail({
         employeeName,
+        payslipNumber: payslip.number,
         periodStart: payslip.periodStart,
         periodEnd: payslip.periodEnd,
         netPay: toNumber(payslip.netPay),
-        payslipNumber: payslip.number,
-        companyName,
+        company,
+        payUrl,
       });
+      const { subject } = mail;
+      // The outbox keeps the plain-text alternative, not the markup: it is a
+      // record of what was said, and nobody reading it wants a page of tables.
+      const body = mail.text;
 
       try {
         if (!employee.workEmail) throw new Error('Employee has no work email address.');
@@ -135,9 +134,9 @@ export class MailService {
 
         const transport = this.transport();
         if (transport === 'acs') {
-          await this.sendViaAcs({ to: employee.workEmail, name: employeeName, subject, body, attachment });
+          await this.sendViaAcs({ to: employee.workEmail, name: employeeName, mail, attachment });
         } else if (transport === 'smtp') {
-          await this.sendViaSmtp({ to: employee.workEmail, subject, body, attachment });
+          await this.sendViaSmtp({ to: employee.workEmail, mail, attachment });
         }
 
         const delivered = transport !== 'outbox';
@@ -197,26 +196,16 @@ export class MailService {
     password: string;
     signInUrl: string;
   }): Promise<{ delivered: boolean; error?: string }> {
-    const companyName = (await this.company.get()).name;
-    const subject = `Your ${companyName} account`;
-    const body = [
-      `Hello ${params.name},`,
-      '',
-      `An account has been created for you on ${companyName}, where you can check`,
-      'in and out, request leave and read your payslips.',
-      '',
-      `Sign in at: ${params.signInUrl}`,
-      `Email:      ${params.to}`,
-      `Password:   ${params.password}`,
-      '',
-      'That password works once. You will be asked to choose your own as soon',
-      'as you sign in.',
-      '',
-      'If you were not expecting this, tell your HR team rather than signing in.',
-      '',
-      'Regards,',
-      'PeoplePay360',
-    ].join('\n');
+    const company = await this.company.get();
+    const mail = inviteEmail({
+      name: params.name,
+      email: params.to,
+      password: params.password,
+      signInUrl: params.signInUrl,
+      company,
+    });
+    const { subject } = mail;
+    const body = mail.text;
 
     const transport = this.transport();
     let status: 'SENT' | 'QUEUED' | 'FAILED' =
@@ -226,9 +215,9 @@ export class MailService {
 
     try {
       if (transport === 'acs') {
-        await this.sendViaAcs({ to: params.to, name: params.name, subject, body });
+        await this.sendViaAcs({ to: params.to, name: params.name, mail });
       } else if (transport === 'smtp') {
-        await this.sendViaSmtp({ to: params.to, subject, body });
+        await this.sendViaSmtp({ to: params.to, mail });
       }
     } catch (err) {
       status = 'FAILED';
@@ -296,8 +285,7 @@ export class MailService {
    */
   private async sendViaSmtp(params: {
     to: string;
-    subject: string;
-    body: string;
+    mail: EmailContent;
     /** Absent for mail that carries nothing, such as an invite. */
     attachment?: { filename: string; content: Buffer };
   }): Promise<void> {
@@ -320,8 +308,11 @@ export class MailService {
     await transport.sendMail({
       from: this.config.get<string>('mail.from'),
       to: params.to,
-      subject: params.subject,
-      text: params.body,
+      subject: params.mail.subject,
+      // Both parts, always. A client that will not render HTML — and a spam
+      // filter that scores an HTML-only message harder — gets the text one.
+      text: params.mail.text,
+      html: params.mail.html,
       attachments: params.attachment
         ? [{ filename: params.attachment.filename, content: params.attachment.content }]
         : undefined,
@@ -339,8 +330,7 @@ export class MailService {
   private async sendViaAcs(params: {
     to: string;
     name: string;
-    subject: string;
-    body: string;
+    mail: EmailContent;
     /** Absent for mail that carries nothing, such as an invite. */
     attachment?: { filename: string; content: Buffer };
   }): Promise<void> {
@@ -357,7 +347,11 @@ export class MailService {
 
     const poller = await this.acs.beginSend({
       senderAddress,
-      content: { subject: params.subject, plainText: params.body },
+      content: {
+        subject: params.mail.subject,
+        plainText: params.mail.text,
+        html: params.mail.html,
+      },
       recipients: { to: [{ address: params.to, displayName: params.name }] },
       attachments: params.attachment
         ? [
