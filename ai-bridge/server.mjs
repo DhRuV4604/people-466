@@ -1,5 +1,7 @@
 import { spawn } from "node:child_process";
+import { existsSync, readdirSync } from "node:fs";
 import { createServer } from "node:http";
+import { join } from "node:path";
 
 /**
  * The Claude CLI, exposed over HTTP.
@@ -14,7 +16,53 @@ import { createServer } from "node:http";
  */
 
 const PORT = Number(process.env.AI_BRIDGE_PORT ?? 4100);
-const CLI = process.env.AI_CLI_PATH ?? "claude";
+/**
+ * Where the Claude CLI lives.
+ *
+ * `AI_CLI_PATH` wins, and on a POSIX host a bare "claude" is normally on PATH.
+ * The Windows installer is the awkward case: it puts versioned directories
+ * under %APPDATA%\Claude\claude-code and adds none of them to PATH, so
+ * spawning "claude" fails with ENOENT. `shell: true` would find the shim, but
+ * this process must never hand a user-influenced argv to a shell, so the
+ * newest install is looked up directly instead.
+ */
+function resolveCli() {
+  if (process.env.AI_CLI_PATH) return process.env.AI_CLI_PATH;
+  if (process.platform !== "win32") return "claude";
+
+  const root = join(process.env.APPDATA ?? "", "Claude", "claude-code");
+  let entries;
+  try {
+    entries = readdirSync(root, { withFileTypes: true });
+  } catch {
+    // Not installed here; let the spawn fail with a name a person recognises.
+    return "claude";
+  }
+
+  // Newest version last. Segments are compared as numbers so 2.1.260 sorts
+  // after 2.1.99, which a string comparison gets backwards.
+  const candidates = entries
+    .filter((entry) => entry.isDirectory())
+    .map((entry) => entry.name)
+    .sort((a, b) => {
+      const left = a.split(".").map(Number);
+      const right = b.split(".").map(Number);
+      for (let i = 0; i < Math.max(left.length, right.length); i += 1) {
+        const diff = (left[i] ?? 0) - (right[i] ?? 0);
+        if (diff) return diff;
+      }
+      return 0;
+    })
+    .reverse();
+
+  for (const version of candidates) {
+    const exe = join(root, version, "claude.exe");
+    if (existsSync(exe)) return exe;
+  }
+  return "claude";
+}
+
+const CLI = resolveCli();
 const MODEL = process.env.AI_MODEL ?? "claude-sonnet-5";
 const TOKEN = process.env.AI_BRIDGE_TOKEN ?? "";
 const TIMEOUT_MS = Number(process.env.AI_TIMEOUT_MS ?? 120_000);
